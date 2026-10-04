@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Ometalk Admin</title>
+    <link rel="stylesheet" href="admin.css">
+    <script src="admin.js" defer></script>
+</head>
+<body>
+    <header class="admin-header">
+        <a class="admin-brand" href="/" aria-label="Ometalk home">
+            <span class="brand-mark">O</span>
+            <span>Ometalk <small>ADMIN</small></span>
+        </a>
+        <div class="service-state">
+            <span class="state-dot"></span>
+            <span id="serviceState">Private dashboard</span>
+        </div>
+    </header>
+
+    <main class="admin-main">
+        <section id="loginView" class="login-view" aria-labelledby="loginTitle">
+            <p class="eyebrow">Restricted access</p>
+            <h1 id="loginTitle">Admin sign in</h1>
+            <p class="muted">Sign in to view anonymous service totals.</p>
+
+            <form id="loginForm">
+                <label for="adminPassword">Admin password</label>
+                <input
+                    id="adminPassword"
+                    name="password"
+                    type="password"
+                    autocomplete="current-password"
+                    required
+                    minlength="16"
+                >
+                <button id="loginButton" type="submit">Sign in</button>
+                <p id="loginStatus" class="form-status" role="status" aria-live="polite"></p>
+            </form>
+        </section>
+
+        <section id="dashboardView" class="dashboard-view" hidden aria-labelledby="dashboardTitle">
+            <div class="dashboard-heading">
+                <div>
+                    <p class="eyebrow">Service overview</p>
+                    <h1 id="dashboardTitle">Live activity</h1>
+                    <p id="updatedAt" class="muted">Waiting for first update</p>
+                </div>
+                <div class="dashboard-actions">
+                    <label class="filter-control" for="rangeFilter">
+                        <span>Date range</span>
+                        <select id="rangeFilter">
+                            <option value="all">All time</option>
+                            <option value="month">1 month</option>
+                            <option value="week">1 week</option>
+                        </select>
+                    </label>
+                    <button id="refreshButton" class="secondary-button" type="button">Refresh</button>
+                    <button id="logoutButton" class="secondary-button" type="button">Sign out</button>
+                </div>
+            </div>
+
+            <div class="metric-grid">
+                <article class="metric metric-live">
+                    <div class="metric-topline">
+                        <span class="metric-icon" aria-hidden="true">●</span>
+                        <span>Right now</span>
+                    </div>
+                    <p id="liveUsers" class="metric-value">--</p>
+                    <h2>Live users</h2>
+                    <p class="metric-description">Connected to the chat server</p>
+                </article>
+
+                <article class="metric metric-connections">
+                    <div class="metric-topline">
+                        <span class="metric-icon" aria-hidden="true">↗</span>
+                        <span id="connectionRangeLabel">All time</span>
+                    </div>
+                    <p id="totalConnections" class="metric-value">--</p>
+                    <h2>Total connections</h2>
+                    <p class="metric-description">Connection sessions, including reconnects</p>
+                </article>
+
+                <article class="metric metric-reports">
+                    <div class="metric-topline">
+                        <span class="metric-icon" aria-hidden="true">!</span>
+                        <span id="reportRangeLabel">All time</span>
+                    </div>
+                    <p id="totalReports" class="metric-value">--</p>
+                    <h2>Reports received</h2>
+                    <p class="metric-description">Aggregate count only; no user identities shown</p>
+                </article>
+            </div>
+
+            <section class="service-details" aria-labelledby="serviceDetailsTitle">
+                <div>
+                    <h2 id="serviceDetailsTitle">Server status</h2>
+                    <p class="muted">Uptime <strong id="serverUptime">--</strong></p>
+                </div>
+                <p class="privacy-note">Date-wise aggregate counts are stored locally. This panel cannot view or join user rooms.</p>
+            </section>
+        </section>
+    </main>
+</body>
+</html>

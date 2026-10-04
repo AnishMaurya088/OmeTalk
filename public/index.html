@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+>
+
+<link rel="icon" type="image/png" href="/wbg-logo-hd.png">
+
+<meta
+    name="description"
+    content="Ometalk - Talk to random strangers anonymously."
+>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+<title>Ometalk - Talk to Strangers</title>
+
+<link
+    rel="stylesheet"
+    href="style.css"
+>
+
+</head>
+
+<body>
+
+<!-- =========================================
+     HEADER
+========================================== -->
+
+<header class="site-header">
+    <a class="brand" href="#home" aria-label="OmeTalk home">
+        <img src="/wbg-logo-hd.png" alt="OmeTalk" class="brand-mark">
+        <span class="brand-name"><span>Ome</span><strong>Talk</strong></span>
+    </a>
+    <nav class="site-nav" aria-label="Main navigation">
+        <a class="active" href="#home">Home</a>
+        <a href="#features">How it Works</a>
+        <a href="#safety">Safety</a>
+        <button class="nav-link" id="faqOpenBtn" type="button">FAQ</button>
+    </nav>
+    <div class="header-actions">
+        <span class="online-status"><span class="status-dot"></span><span id="onlineText">Connecting...</span></span>
+        <button class="header-cta" id="premiumOpenBtn" type="button">Premium <span aria-hidden="true">→</span></button>
+    </div>
+</header>
+
+<main id="home" class="home-page">
+    <section class="hero">
+        <div class="hero-inner">
+            <div class="hero-copy">
+                <p class="handwritten">Real People. Random Conversations.</p>
+                <h1>Meet. <span class="blue-word">Talk.</span> <span class="pink-word">Connect.</span></h1>
+                <p class="hero-description">Connect with real people from around the world through anonymous text or video chat. No signup. No complicated setup. Just pure conversations.</p>
+                <div class="hero-actions">
+                    <button class="hero-button text-chat start-chat-link" type="button" data-mode="text">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11.5a7.5 7.5 0 0 1-8 7.5 8.5 8.5 0 0 1-3.5-.8L4 20l1.4-3.5A7.2 7.2 0 0 1 4 12c0-4.2 3.6-7.5 8-7.5s8 2.8 8 7z"></path><path d="M8 12h.01M12 12h.01M16 12h.01"></path></svg>
+                        Start Text Chat <span aria-hidden="true">→</span>
+                    </button>
+                    <button class="hero-button video-chat start-chat-link" type="button" data-mode="video">
+                        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="13" height="12" rx="2"></rect><path d="m16 10 5-3v10l-5-3z"></path></svg>
+                        Start Video Chat <span aria-hidden="true">→</span>
+                    </button>
+                </div>
+            </div>
+            <div class="hero-art" aria-label="Preview of an OmeTalk conversation">
+                <span class="doodle doodle-top" aria-hidden="true">↘</span>
+                <div class="preview-card video-preview">
+                    <div class="preview-top"><span class="connected-dot"></span> Connected</div>
+                    <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=560&q=85" alt="A person smiling during a video chat">
+                    <div class="preview-controls"><span>🎙</span><span>▣</span><span class="hangup">●</span></div>
+                </div>
+                <div class="preview-card message-preview">
+                    <div class="stranger-title"><span class="mini-avatar">S</span> Stranger <span class="more-dots">⋮</span></div>
+                    <div class="chat-bubble incoming">Hey! How are you?<small>10:24 PM</small></div>
+                    <div class="chat-bubble outgoing">I'm good! 😊<small>10:25 PM</small></div>
+                    <div class="chat-bubble incoming">Where are you from?<small>10:25 PM</small></div>
+                    <div class="message-entry">Type a message... <span>➤</span></div>
+                </div>
+                <div class="preview-card side-preview">
+                    <div class="side-label">▣ Video Chat</div>
+                    <img src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=400&q=85" alt="A person smiling on a video call">
+                </div>
+                <p class="story-note">New people,<br>new stories...</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="features" id="features" aria-label="Why OmeTalk">
+        <div class="feature-item">
+            <span class="feature-icon shield-icon"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3 26 7v8c0 7-4.7 11.7-10 14-5.3-2.3-10-7-10-14V7z"></path><path d="m11 16 3 3 7-8"></path></svg></span>
+            <h2>100% Anonymous</h2><p>No signup, no personal<br>information required.</p>
+        </div>
+        <div class="feature-item">
+            <span class="feature-icon bolt-icon"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M18 3 7 18h8l-1 11 11-16h-8z"></path></svg></span>
+            <h2>Instant Connection</h2><p>Get matched with someone<br>random in seconds.</p>
+        </div>
+        <div class="feature-item">
+            <span class="feature-icon chat-icon"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M27 15a11 11 0 0 1-11 11 12 12 0 0 1-5.2-1.2L5 27l1.8-5A10.7 10.7 0 0 1 5 16C5 9.9 9.9 5 16 5s11 4.5 11 10z"></path><path d="M12 15h.01M16 15h.01M20 15h.01"></path></svg></span>
+            <h2>Text or Video</h2><p>Choose how you want<br>to chat.</p>
+        </div>
+        <div class="feature-item">
+            <span class="feature-icon people-icon"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="12" cy="10" r="5"></circle><path d="M3 27v-2a9 9 0 0 1 18 0v2M21 6a5 5 0 0 1 0 9m2 3a8 8 0 0 1 6 8v1"></path></svg></span>
+            <h2>Real People</h2><p>Meet genuine people<br>from around the world.</p>
+        </div>
+        <div class="feature-item" id="safety">
+            <span class="feature-icon safety-icon"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 3 26 7v8c0 7-4.7 11.7-10 14-5.3-2.3-10-7-10-14V7z"></path><path d="m16 9-4 8h4l-1 6 5-9h-4z"></path></svg></span>
+            <h2>Your Safety Matters</h2><p>Report &amp; block features<br>for a safer experience.</p>
+        </div>
+    </section>
+</main>
+
+
+<!-- =========================================
+     MAIN APPLICATION
+========================================= -->
+
+<main class="app-container hidden">
+
+
+    <!-- =====================================
+         WELCOME SCREEN
+    ====================================== -->
+
+    <section
+        id="welcomeScreen"
+        class="screen"
+    >
+
+        <div class="welcome-card">
+
+            <button id="backHomeBtn" class="back-home" type="button">← Back to home</button>
+
+            <div class="logo-large">
+                <span>Ome</span><strong>Talk</strong>
+            </div>
+
+            <h1>
+                <span class="blue-word">Talk</span> to <span class="pink-word">Strangers</span>
+            </h1>
+
+            <p class="subtitle">
+                Meet someone new. Talk anonymously.
+            </p>
+
+
+            <div class="rules">
+            <div class="mode-story" id="modeStory" data-mode="video">
+                <div class="mode-story-heading">
+                    <div>
+                        <p class="mode-story-kicker" id="modeStoryKicker">VIDEO CHAT</p>
+                        <h2><span id="modeStoryAccent" class="pink-word">Meet</span> <span id="modeStoryRest">face to face, anywhere.</span></h2>
+                    </div>
+                    <span class="mode-story-icon" aria-hidden="true">
+                        <svg class="video-story-icon" viewBox="0 0 24 24"><rect x="3" y="6" width="13" height="12" rx="2"></rect><path d="m16 10 5-3v10l-5-3z"></path></svg>
+                        <svg class="text-story-icon" viewBox="0 0 24 24"><path d="M20 11.5a7.5 7.5 0 0 1-8 7.5 8.5 8.5 0 0 1-3.5-.8L4 20l1.4-3.5A7.2 7.2 0 0 1 4 12c0-4.2 3.6-7.5 8-7.5s8 2.8 8 7z"></path><path d="M8 12h.01M12 12h.01M16 12h.01"></path></svg>
+                    </span>
+                </div>
+                <p class="mode-story-description" id="modeStoryDescription">Live video turns a quick hello into a real conversation.</p>
+                <div class="mode-story-points">
+                    <span id="modePointOne">Live face-to-face</span>
+                    <span id="modePointTwo">Camera and mic controls</span>
+                    <span id="modePointThree">Leave whenever you like</span>
+                </div>
+            </div>
+
+            <div class="match-options">
+                <span class="options-label">Your selected chat</span>
+                <div class="mode-options" role="group" aria-label="Chat mode">
+                    <label class="mode-option">
+                        <input type="radio" name="chatMode" value="video" checked>
+                        <span>Video chat</span>
+                    </label>
+                    <label class="mode-option">
+                        <input type="radio" name="chatMode" value="text">
+                        <span>Text chat</span>
+                    </label>
+                </div>
+                <p id="modeHint" class="mode-hint">Video chat selected. Camera and microphone are needed to connect.</p>
+
+                <label class="options-label" for="profileName">
+                    Name <span>(optional)</span>
+                </label>
+                <input
+                    id="profileName"
+                    class="interests-input"
+                    type="text"
+                    maxlength="24"
+                    placeholder="Choose a display name"
+                    autocomplete="nickname"
+                >
+
+                <label class="options-label" for="interestsInput">
+                    Interests <span>(optional)</span>
+                </label>
+                <input
+                    id="interestsInput"
+                    class="interests-input"
+                    type="text"
+                    maxlength="240"
+                    placeholder="Type interests, separated by commas"
+                    autocomplete="off"
+                >
+                <div class="interest-chips" aria-label="Popular interests">
+                    <button type="button" class="interest-chip" data-interest="music">Music</button>
+                    <button type="button" class="interest-chip" data-interest="gaming">Gaming</button>
+                    <button type="button" class="interest-chip" data-interest="movies">Movies</button>
+                    <button type="button" class="interest-chip" data-interest="travel">Travel</button>
+                    <button type="button" class="interest-chip" data-interest="technology">Technology</button>
+                    <button type="button" class="interest-chip" data-interest="sports">Sports</button>
+                </div>
+
+                <label class="age-consent">
+                    <input id="ageConsent" type="checkbox">
+                    <span>I confirm that I am 18 or older and will use the service responsibly.</span>
+                </label>
+            </div>
+
+
+            <button
+                id="startBtn"
+                class="primary-btn"
+                disabled
+            >
+                Connect
+            </button>
+
+
+            <p class="age-warning">
+                By using Ometalk, you agree to use the
+                service responsibly.
+            </p>
+
+        </div>
+
+    </section>
+
+
+
+    <!-- =====================================
+         CHAT SCREEN
+    ====================================== -->
+
+    <section
+        id="chatScreen"
+        class="chat-screen hidden"
+    >
+
+
+        <!-- =================================
+             VIDEO AREA
+        ================================== -->
+
+        <div class="video-area">
+
+            <!-- Stranger Video -->
+
+            <div
+                class="stranger-video-container"
+                role="button"
+                tabindex="0"
+                aria-label="Stranger video is the main view"
+                aria-pressed="true"
+            >
+
+                <video
+                    id="remoteVideo"
+                    autoplay
+                    playsinline
+                ></video>
+
+
+                <div
+                    id="remotePlaceholder"
+                    class="video-placeholder"
+                >
+
+                    <div class="video-loader" aria-hidden="true">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </div>
+
+                    <p>
+                        Waiting for stranger...
+                    </p>
+
+                    <small>
+                        Your stranger's video will appear here
+                    </small>
+
+                </div>
+
+            </div>
+
+
+            <!-- My Video -->
+
+            <div
+                class="my-video-container"
+                role="button"
+                tabindex="0"
+                aria-label="Make your video the main view"
+                aria-pressed="false"
+            >
+
+                <video
+                    id="localVideo"
+                    autoplay
+                    muted
+                    playsinline
+                ></video>
+
+            </div>
+
+            <div class="video-controls">
+                <button
+                    id="cameraBtn"
+                    class="control-btn media-toggle-btn"
+                    type="button"
+                    aria-label="Camera"
+                    aria-pressed="true"
+                    title="Turn camera off"
+                >
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="12" height="12" rx="2.5"></rect><path d="m15 10 6-3v10l-6-3z"></path><path class="toggle-off-mark" d="m4 4 16 16"></path></svg>
+                </button>
+
+                <button
+                    id="micBtn"
+                    class="control-btn media-toggle-btn"
+                    type="button"
+                    aria-label="Microphone"
+                    aria-pressed="true"
+                    title="Turn microphone off"
+                >
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="13" rx="3"></rect><path d="M5 11v1a7 7 0 0 0 14 0v-1M12 19v3m-4 0h8"></path><path class="toggle-off-mark" d="m4 4 16 16"></path></svg>
+                </button>
+
+                <button
+                    id="videoLayoutBtn"
+                    class="control-btn video-layout-btn"
+                    type="button"
+                    aria-label="Minimize video"
+                    aria-pressed="false"
+                    title="Minimize video"
+                >
+                    <svg class="video-layout-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <g class="minimize-icon"><rect x="3" y="4" width="18" height="16" rx="2"></rect><path d="M3 9h18"></path><rect x="12" y="12" width="6" height="5" rx="1"></rect></g>
+                    </svg>
+                </button>
+            </div>
+
+        </div>
+
+
+
+        <!-- =================================
+             CHAT AREA
+        ================================== -->
+
+        <div class="chat-area">
+
+
+            <!-- Chat Header -->
+
+            <div class="chat-header">
+
+                <div>
+
+                        <strong id="partnerName">
+                        Stranger
+                    </strong>
+
+                    <div
+                        id="chatStatus"
+                        class="chat-status"
+                    >
+                        Connecting...
+                    </div>
+
+                </div>
+
+                <div class="chat-actions">
+                    <button
+                        id="leaveBtn"
+                        class="ghost-btn"
+                    >
+                        Leave
+                    </button>
+
+                    <button
+                        id="reportBtn"
+                        class="ghost-btn danger"
+                    >
+                        Report
+                    </button>
+
+                    <button
+                        id="nextBtn"
+                        class="next-btn"
+                    >
+                        Next →
+                    </button>
+                </div>
+
+            </div>
+
+
+
+            <!-- Messages -->
+
+            <div
+                id="messages"
+                class="messages"
+            >
+
+                <div class="system-message">
+                    Looking for a stranger...
+                </div>
+
+            </div>
+
+            <div id="typingIndicator" class="typing-indicator" aria-live="polite"></div>
+
+
+
+            <!-- Message Input -->
+
+            <form
+                id="messageForm"
+                class="message-form"
+            >
+
+                <input
+                    id="messageInput"
+                    type="text"
+                    placeholder="Type a message..."
+                    maxlength="1000"
+                    autocomplete="off"
+                >
+
+                <button
+                    type="submit"
+                    class="send-btn"
+                >
+                    Send
+                </button>
+
+            </form>
+
+
+        </div>
+
+
+    </section>
+
+
+</main>
+
+
+
+<!-- =========================================
+     FOOTER
+========================================== -->
+
+<footer class="footer">
+    <a class="footer-brand" href="#home"><img src="/wbg-logo-hd.png" alt=""><span><b>Ome</b><strong>Talk</strong></span></a>
+    <nav class="footer-nav" aria-label="Footer navigation"><a href="#home">Home</a><a href="#features">How it Works</a><a href="#safety">Safety</a><a href="/contact">Contact</a><a href="/feedback">Feedback</a><button id="footerFaqBtn" type="button">FAQ</button></nav>
+    <div class="footer-meta"><span class="social-icons" aria-label="Social links"><a class="social-instagram" href="https://www.instagram.com/ometalk.in/" target="_blank" rel="noopener noreferrer" aria-label="OmeTalk on Instagram" title="OmeTalk on Instagram"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"></rect><circle cx="12" cy="12" r="4"></circle><circle cx="18" cy="6" r=".8" class="instagram-dot"></circle></svg></a></span><i></i><small>© 2026 OmeTalk. All rights reserved.</small></div>
+</footer>
+
+<dialog class="faq-dialog" id="faqDialog">
+    <button class="faq-close" id="faqCloseBtn" type="button" aria-label="Close FAQ">×</button>
+    <p class="faq-eyebrow">QUICK ANSWERS</p><h2>Frequently Asked Questions</h2>
+    <details><summary>Do I need to create an account?</summary><p>No. OmeTalk is designed for anonymous conversations and does not require signup.</p></details>
+    <details><summary>Can I choose text or video?</summary><p>Yes. Choose a chat mode before matching. Video requires camera and microphone permission.</p></details>
+    <details><summary>How do I stay safe?</summary><p>Keep personal details private, and use the report or leave controls whenever you need them.</p></details>
+</dialog>
+
+<dialog class="faq-dialog premium-dialog" id="premiumDialog">
+    <button class="faq-close" id="premiumCloseBtn" type="button" aria-label="Close Premium">×</button>
+    <p class="faq-eyebrow">OMETALK PREMIUM</p>
+    <h2>Premium is coming soon</h2>
+    <p class="premium-message">We're working on a better way to make your conversations feel special.</p>
+</dialog>
+
+
+
+<!-- Socket.io -->
+
+<script src="/socket.io/socket.io.js"></script>
+
+
+<!-- Our JavaScript -->
+
+<script src="script.js"></script>
+
+</body>
+
+</html>

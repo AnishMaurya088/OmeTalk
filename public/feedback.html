@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="OmeTalk - Feedback" />
+    <link rel="icon" type="image/png" href="/wbg-logo-hd.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <title>OmeTalk Feedback</title>
+    <link rel="stylesheet" href="/style.css" />
+    <style>
+      body {
+        background: linear-gradient(135deg, #f5f9ff 0%, #edf5ff 42%, #eef4ff 100%);
+        color: #0f172a;
+      }
+
+      .feedback-shell {
+        width: min(760px, calc(100% - 40px));
+        margin: 48px auto 56px;
+        padding: 32px 24px 24px;
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        border-radius: 24px;
+        background: rgba(255, 255, 255, 0.78);
+        box-shadow: 0 18px 44px rgba(15, 23, 42, 0.08);
+      }
+
+      .feedback-shell h1 {
+        margin-bottom: 8px;
+        font-size: clamp(2.1rem, 4vw, 3rem);
+        letter-spacing: -0.04em;
+      }
+
+      .feedback-intro {
+        margin-bottom: 24px;
+        color: #495d7a;
+        line-height: 1.7;
+      }
+
+      .feedback-form {
+        display: grid;
+        gap: 18px;
+      }
+
+      .field-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 18px;
+      }
+
+      .field {
+        display: grid;
+        gap: 8px;
+      }
+
+      .field label {
+        color: #1e293b;
+        font-weight: 700;
+        font-size: 0.95rem;
+      }
+
+      .field input,
+      .field select,
+      .field textarea {
+        width: 100%;
+        border: 1px solid rgba(148, 163, 184, 0.45);
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.72);
+        color: #0f172a;
+        font: inherit;
+        padding: 12px 14px;
+      }
+
+      .field textarea {
+        min-height: 160px;
+        resize: vertical;
+      }
+
+      .checkbox-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        color: #495d7a;
+      }
+
+      .checkbox-row input {
+        width: 18px;
+        height: 18px;
+        margin-top: 2px;
+        accent-color: #1a6ef5;
+      }
+
+      .submit-btn {
+        border: none;
+        border-radius: 999px;
+        background: linear-gradient(135deg, #1a6ef5, #f349a7);
+        color: white;
+        padding: 14px 22px;
+        font-weight: 800;
+        cursor: pointer;
+        width: fit-content;
+        min-width: 180px;
+      }
+
+      .submit-btn:disabled {
+        opacity: 0.7;
+        cursor: wait;
+      }
+
+      .status-text {
+        margin-top: 18px;
+        min-height: 24px;
+        color: #495d7a;
+        font-weight: 700;
+      }
+
+      .status-text.error { color: #b71c1c; }
+      .status-text.success { color: #188a4c; }
+
+      @media (max-width: 640px) {
+        .feedback-shell { margin-top: 32px; }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="OmeTalk home">
+        <img src="/wbg-logo-hd.png" alt="OmeTalk" class="brand-mark" />
+        <span class="brand-name"><span>Ome</span><strong>Talk</strong></span>
+      </a>
+      <nav class="site-nav" aria-label="Main navigation">
+        <a href="/">Home</a>
+        <a href="/contact">Contact</a>
+        <a class="active" href="/feedback">Feedback</a>
+        <button class="nav-link" type="button">FAQ</button>
+      </nav>
+      <div class="header-actions">
+        <span class="online-status"><span class="status-dot"></span><span>Online</span></span>
+        <button class="header-cta" type="button">Premium <span aria-hidden="true">→</span></button>
+      </div>
+    </header>
+
+    <main class="feedback-shell">
+      <a class="back-link" href="/" style="display:inline-flex; align-items:center; gap:8px; color:#1a6ef5; text-decoration:none; font-weight:700; margin-bottom:20px;">← Back to home</a>
+      <h1>We value your feedback</h1>
+      <p class="feedback-intro">
+        Tell us what is working well, what needs improvement, or what you'd like to see in OmeTalk next.
+      </p>
+
+      <form class="feedback-form" id="feedbackForm" novalidate>
+        <div class="field-grid">
+          <div class="field">
+            <label for="feedbackName">Name</label>
+            <input id="feedbackName" name="name" type="text" maxlength="80" placeholder="Your name" />
+          </div>
+
+          <div class="field">
+            <label for="feedbackEmail">Email</label>
+            <input id="feedbackEmail" name="email" type="email" maxlength="160" placeholder="Your email" />
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="feedbackType">Type</label>
+          <select id="feedbackType" name="type">
+            <option value="bug">Bug report</option>
+            <option value="idea">Idea</option>
+            <option value="question">Question</option>
+            <option value="other" selected>Other</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="feedbackRating">Rating</label>
+          <select id="feedbackRating" name="rating" required>
+            <option value="5" selected>5 - Excellent</option>
+            <option value="4">4 - Good</option>
+            <option value="3">3 - Average</option>
+            <option value="2">2 - Poor</option>
+            <option value="1">1 - Very poor</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="feedbackMessage">Your message</label>
+          <textarea id="feedbackMessage" name="message" placeholder="Tell us what happened or what you would like improved..." required></textarea>
+        </div>
+
+        <label class="checkbox-row" for="feedbackConsent">
+          <input id="feedbackConsent" name="consent" type="checkbox" required />
+          <span>I agree to share this feedback and understand it may be reviewed by the OmeTalk team.</span>
+        </label>
+
+        <button class="submit-btn" type="submit" id="submitFeedbackBtn">Send feedback</button>
+      </form>
+
+      <p class="status-text" id="feedbackStatus" aria-live="polite"></p>
+    </main>
+
+    <footer class="footer">
+      <a class="footer-brand" href="/"><img src="/wbg-logo-hd.png" alt=""><span><b>Ome</b><strong>Talk</strong></span></a>
+      <nav class="footer-nav" aria-label="Footer navigation">
+        <a href="/">Home</a>
+        <a href="/contact">Contact</a>
+        <a href="/feedback">Feedback</a>
+        <button type="button">FAQ</button>
+      </nav>
+      <div class="footer-meta">
+        <span class="social-icons" aria-label="Social links">
+          <a class="social-instagram" href="https://www.instagram.com/ometalk.in/" target="_blank" rel="noopener noreferrer" aria-label="OmeTalk on Instagram" title="OmeTalk on Instagram">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"></rect><circle cx="12" cy="12" r="4"></circle><circle cx="18" cy="6" r=".8" class="instagram-dot"></circle></svg>
+          </a>
+        </span>
+        <i></i>
+        <small>© 2026 OmeTalk. All rights reserved.</small>
+      </div>
+    </footer>
+
+    <script src="/feedback-page.js"></script>
+  </body>
+</html>
