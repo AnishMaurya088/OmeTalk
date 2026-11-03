@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="OmeTalk Premium: friends, private chat, and voice or video calls.">
+    <meta name="referrer" content="no-referrer">
+    <meta name="theme-color" content="#061b4c">
+    <title>OmeTalk Premium</title>
+    <link rel="icon" type="image/png" href="/wbg-logo-hd.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/premium.css">
+    <script src="/socket.io/socket.io.js" defer></script>
+    <script src="/premium.js" defer></script>
+</head>
+<body>
+    <header class="premium-header">
+        <a href="/" class="premium-brand"><img src="/wbg-logo-hd.png" alt=""><span>Ome<strong>Talk</strong></span></a>
+        <span class="premium-badge">PREMIUM</span>
+        <a class="back-link" href="/">Back to free chat</a>
+    </header>
+
+    <main class="premium-main">
+        <section id="authView" class="card auth-card">
+            <p class="eyebrow">A closer way to connect</p>
+            <h1 class="premium-title"><span>Ome</span><strong>Talk</strong> <b>Premium</b></h1>
+            <p class="muted">Create an account to find friends, send text/audio/video messages, and call by voice or video.</p>
+            <div id="authTabs" class="auth-tabs" role="tablist">
+                <button id="loginTab" class="active" type="button" role="tab" aria-selected="true">Sign in</button>
+                <button id="registerTab" type="button" role="tab" aria-selected="false">Create account</button>
+            </div>
+            <form id="authForm">
+                <p id="registrationPrivacyHint" class="field-hint" hidden>Your name and date of birth stay private. Other users see only your username.</p>
+                <label id="fullNameLabel" for="fullNameInput" hidden>Full name</label>
+                <input id="fullNameInput" name="name" autocomplete="name" maxlength="100" placeholder="Your name" hidden>
+                <label id="dateOfBirthLabel" for="dateOfBirthInput" hidden>Date of birth</label>
+                <input id="dateOfBirthInput" name="bday" type="date" autocomplete="bday" hidden>
+                <p id="dateOfBirthHint" class="field-hint" hidden>You must be 18 or older to create a Premium account.</p>
+                <label id="usernameLabel" for="usernameInput" hidden>Username</label>
+                <input id="usernameInput" name="username" autocomplete="username" minlength="3" maxlength="24" placeholder="Username (letters, numbers, _)" hidden>
+                <button id="suggestUsernameButton" class="secondary-button" type="button" hidden>Suggest another username</button>
+                <p id="usernameHint" class="field-hint" aria-live="polite" hidden>Username must be unique. You can edit the suggestion.</p>
+                <label for="emailInput">Email</label>
+                <input id="emailInput" name="email" type="email" autocomplete="email" maxlength="254" required>
+                <label for="passwordInput">Password</label>
+                <input id="passwordInput" name="password" type="password" autocomplete="current-password" minlength="6" maxlength="128" required>
+                <p id="passwordHint" class="field-hint" hidden>Use at least 6 characters.</p>
+                <button id="forgotPasswordButton" class="text-button" type="button">Forgot password?</button>
+                <button id="authSubmit" class="primary-button" type="submit">Sign in</button>
+                <p id="authStatus" class="status" role="status" aria-live="polite"></p>
+            </form>
+            <form id="forgotPasswordForm" hidden>
+                <p class="muted">Enter the email address for your account. We’ll send you a one-time password reset link.</p>
+                <label for="resetEmailInput">Email</label>
+                <input id="resetEmailInput" type="email" autocomplete="email" maxlength="254" required>
+                <button id="sendResetLinkButton" class="primary-button" type="submit">Send reset link</button>
+                <button id="backToSignInButton" class="text-button" type="button">Back to sign in</button>
+                <p id="forgotPasswordStatus" class="status" role="status" aria-live="polite"></p>
+            </form>
+            <form id="resetPasswordForm" hidden>
+                <p class="muted">Choose a new password with at least 6 characters.</p>
+                <label for="newPasswordInput">New password</label>
+                <input id="newPasswordInput" type="password" autocomplete="new-password" minlength="6" maxlength="128" required>
+                <label for="confirmPasswordInput">Confirm new password</label>
+                <input id="confirmPasswordInput" type="password" autocomplete="new-password" minlength="6" maxlength="128" required>
+                <button id="resetPasswordButton" class="primary-button" type="submit">Change password</button>
+                <p id="resetPasswordStatus" class="status" role="status" aria-live="polite"></p>
+            </form>
+        </section>
+
+        <section id="accountView" hidden>
+            <div class="account-heading card">
+                <div>
+                    <p class="eyebrow">Your account</p>
+                    <h1>Hi, <span id="accountUsername"></span></h1>
+                    <p id="membershipStatus" class="muted"></p>
+                </div>
+                <button id="signOutButton" class="secondary-button" type="button">Sign out</button>
+            </div>
+
+            <section id="upgradeCard" class="card upgrade-card" hidden>
+                <div>
+                    <p class="eyebrow">Premium membership</p>
+                    <h2>Friends, text/audio/video messages, voice and video calls</h2>
+                    <p class="muted">Choose a plan, pay using the QR code, then submit your UTR and payment screenshot. Admin verifies and activates your plan. Messages expire individually 24 hours after sending; single-view messages expire 1 minute after opening.</p>
+                </div>
+                <form id="paymentRequestForm" class="coupon-form">
+                    <img id="paymentQrImage" class="payment-qr" alt="OmeTalk Premium payment QR code" hidden>
+                    <p id="paymentQrStatus" class="status" role="status" aria-live="polite"></p>
+                    <label for="planSelect">Choose plan</label>
+                    <select id="planSelect" required>
+                        <option value="month_1">1 month — ₹299</option>
+                        <option value="month_3">3 months — ₹699</option>
+                    </select>
+                    <label for="couponInput">Discount coupon (optional)</label>
+                    <div class="coupon-row">
+                        <input id="couponInput" maxlength="32" autocomplete="off" placeholder="Enter code">
+                        <button id="applyCouponButton" class="secondary-button" type="button">Apply</button>
+                    </div>
+                    <p id="couponStatus" class="status" role="status" aria-live="polite"></p>
+                    <label for="paymentUtrInput">UPI transaction ID / UTR</label>
+                    <input id="paymentUtrInput" maxlength="40" pattern="[A-Za-z0-9/-]{6,40}" required placeholder="Enter the UTR from your payment app">
+                    <label for="paymentProofInput">Payment screenshot (JPG, PNG, WebP; max 5 MB)</label>
+                    <input id="paymentProofInput" type="file" accept="image/jpeg,image/png,image/webp" required>
+                    <p id="paymentAmountHint" class="field-hint">Amount due: ₹299. Coupon discounts are applied before you pay.</p>
+                    <button id="paymentRequestButton" class="primary-button" type="submit">Submit payment for verification</button>
+                    <p id="paymentRequestStatus" class="status" role="status" aria-live="polite"></p>
+                </form>
+            </section>
+
+            <section id="accountSettings" class="card account-settings">
+                <details open>
+                    <summary>Account settings &amp; payment history</summary>
+                    <div class="settings-content">
+                        <h2>Payment history</h2>
+                        <div class="history-table-wrap">
+                            <table class="payment-history">
+                                <thead><tr><th>Date</th><th>Plan</th><th>Amount</th><th>Coupon</th><th>Status</th><th>Expiry</th></tr></thead>
+                                <tbody id="paymentHistoryBody"><tr><td colspan="6">Loading payment history…</td></tr></tbody>
+                            </table>
+                        </div>
+                        <div class="delete-account-section">
+                            <h2>Delete account</h2>
+                            <p id="deletionRequestStatus" class="status" role="status" aria-live="polite"></p>
+                            <button id="deleteAccountRequestButton" class="danger-button" type="button">Request permanent account deletion</button>
+                            <button id="cancelDeletionRequestButton" class="secondary-button" type="button" hidden>Cancel deletion request</button>
+                        </div>
+                    </div>
+                </details>
+            </section>
+
+            <section id="premiumApp" class="premium-layout" hidden>
+                <aside class="card friends-panel">
+                    <div class="section-title">
+                        <div><p class="eyebrow">Your circle</p><h2>Friends</h2></div>
+                        <button id="premiumLogoutButton" class="text-button" type="button">Sign out</button>
+                    </div>
+                    <button id="randomMatchButton" class="primary-button" type="button">Find a Premium stranger</button>
+                    <p id="matchStatus" class="status" aria-live="polite"></p>
+                    <form id="addFriendForm" class="add-friend-form">
+                        <label for="friendUsernameInput">Add friend by username</label>
+                        <div class="coupon-row">
+                            <input id="friendUsernameInput" maxlength="24" placeholder="Their username">
+                            <button class="secondary-button" type="submit">Add</button>
+                        </div>
+                        <p id="friendStatus" class="status" role="status" aria-live="polite"></p>
+                    </form>
+                    <div id="friendsList" class="friends-list" aria-label="Friends list"></div>
+                </aside>
+
+                <section class="card conversation-panel" aria-label="Premium conversation">
+                    <div class="conversation-heading">
+                        <div>
+                            <p class="eyebrow">Conversation</p>
+                            <h2 id="conversationTitle">Choose a friend or find someone new</h2>
+                            <p id="conversationStatus" class="muted">Messages automatically expire.</p>
+                        </div>
+                        <button id="addMatchedFriendButton" class="secondary-button" type="button" hidden>Add friend</button>
+                        <button id="reportConversationButton" class="danger-button" type="button" hidden>Report conversation</button>
+                    </div>
+
+                    <div class="call-area" id="callArea" hidden>
+                        <video id="callRemoteVideo" autoplay playsinline></video>
+                        <video id="callLocalVideo" autoplay muted playsinline></video>
+                        <div id="callPlaceholder" class="call-placeholder">Call is connecting…</div>
+                    </div>
+                    <div class="call-controls">
+                        <button id="audioCallButton" class="secondary-button" type="button" disabled>Voice call</button>
+                        <button id="videoCallButton" class="secondary-button" type="button" disabled>Video call</button>
+                        <button id="toggleCallMicButton" class="secondary-button" type="button" hidden>Mute mic</button>
+                        <button id="toggleCallCameraButton" class="secondary-button" type="button" hidden>Turn camera off</button>
+                        <button id="minimizeCallButton" class="secondary-button" type="button" hidden>Minimize video</button>
+                        <button id="endCallButton" class="danger-button" type="button" hidden>End call</button>
+                    </div>
+
+                    <div id="premiumMessages" class="premium-messages" aria-live="polite">
+                        <p class="empty-state">Your messages will appear here.</p>
+                    </div>
+                    <form id="premiumMessageForm" class="premium-message-form">
+                        <label class="single-view-option"><input id="singleViewCheckbox" type="checkbox"> Single-view</label>
+                        <input id="premiumMessageInput" maxlength="2000" placeholder="Write a message…" autocomplete="off" disabled>
+                        <button class="primary-button" type="submit" disabled>Send</button>
+                    </form>
+                    <div class="media-message-form">
+                        <label class="media-picker" for="mediaFileInput">Attach audio/video (max 25 MB)</label>
+                        <input id="mediaFileInput" type="file" accept="audio/webm,audio/ogg,audio/mp4,audio/wav,audio/mpeg,audio/flac,audio/aac,video/webm,video/mp4,video/quicktime,video/ogg" disabled>
+                        <button id="sendMediaButton" class="secondary-button" type="button" disabled>Send media</button>
+                        <p id="mediaStatus" class="status" role="status" aria-live="polite"></p>
+                    </div>
+                    <p class="expiry-note">Each message expires 24 hours after it is sent. Single-view text or media disappears 1 minute after opening; screenshots and screen recording cannot be prevented.</p>
+                </section>
+            </section>
+        </section>
+    </main>
+</body>
+</html>

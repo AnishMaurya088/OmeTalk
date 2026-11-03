@@ -3,7 +3,7 @@
   "version": "1.0.2",
   "main": "server.js",
   "scripts": {
-    "check": "node --check server.js && node --check public/script.js && node --check public/admin.js && node --check public/feedback-page.js",
+    "check": "node --check server.js && node --check premium-server.js && node --check public/script.js && node --check public/premium.js && node --check public/admin.js && node --check public/feedback-page.js",
     "test": "npm run check",
     "start": "node server.js"
   },
@@ -12,7 +12,11 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "bcryptjs": "^3.0.3",
     "express": "^5.2.1",
+    "multer": "^2.5.0",
+    "nodemailer": "^10.3.1",
+    "pg": "^8.23.1",
     "socket.io": "^4.8.4"
   }
 }

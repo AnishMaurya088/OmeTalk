@@ -90,7 +90,7 @@
                     </div>
                     <p id="totalReports" class="metric-value">--</p>
                     <h2>Reports received</h2>
-                    <p class="metric-description">Aggregate count only; no user identities shown</p>
+                    <p class="metric-description">Includes reports pending review</p>
                 </article>
             </div>
 
@@ -99,7 +99,129 @@
                     <h2 id="serviceDetailsTitle">Server status</h2>
                     <p class="muted">Uptime <strong id="serverUptime">--</strong></p>
                 </div>
-                <p class="privacy-note">Date-wise aggregate counts are stored locally. This panel cannot view or join user rooms.</p>
+                <p class="privacy-note">Video and audio calls are never recorded. Admins can read text only from reported chats; every access requires a reason and is audited.</p>
+            </section>
+
+            <section class="premium-admin-section" aria-labelledby="moderationTitle">
+                <div class="moderation-heading">
+                    <div>
+                        <h2 id="moderationTitle">Reported conversations</h2>
+                        <p class="muted">Only reported chats appear here. Up to 100 recent text messages are retained for 30 days. Opening a transcript requires an access reason and is audit-logged.</p>
+                        <p id="reportsStatus" class="form-status" role="status" aria-live="polite"></p>
+                    </div>
+                    <button id="refreshReportsButton" class="secondary-button" type="button">Refresh reports</button>
+                </div>
+                <div class="admin-table-wrap">
+                    <table>
+                        <thead><tr><th>Category</th><th>Reported user</th><th>Reporter</th><th>Submitted</th><th>Messages</th><th>Status</th><th>Action</th></tr></thead>
+                        <tbody id="reportsBody"><tr><td colspan="7">Sign in to load reports.</td></tr></tbody>
+                    </table>
+                </div>
+                <section id="reportDetail" class="report-detail" hidden aria-live="polite">
+                    <div class="moderation-heading">
+                        <div>
+                            <h3 id="reportDetailTitle">Reported chat</h3>
+                            <p id="reportDetailMeta" class="muted"></p>
+                        </div>
+                        <button id="closeReportDetailButton" class="secondary-button" type="button">Close transcript</button>
+                    </div>
+                    <ol id="reportTranscript" class="report-transcript"></ol>
+                    <h4>Access and review audit</h4>
+                    <ul id="reportAuditLog" class="report-audit-log"></ul>
+                    <label class="review-note-label" for="reportReviewNote">Resolution note (optional)
+                        <textarea id="reportReviewNote" maxlength="1000" rows="3"></textarea>
+                    </label>
+                    <button id="resolveReportButton" class="secondary-button" type="button">Mark resolved</button>
+                    <p id="reportReviewStatus" class="form-status" role="status" aria-live="polite"></p>
+                </section>
+            </section>
+
+            <section class="premium-admin-section" aria-labelledby="premiumAdminTitle">
+                <div class="premium-admin-heading">
+                    <div>
+                        <p class="eyebrow">Paid membership</p>
+                        <h2 id="premiumAdminTitle">Payment setup</h2>
+                        <p class="muted">Users choose a one-month ₹299 or three-month ₹699 plan and pay by QR. Review each screenshot and UTR before activation.</p>
+                    </div>
+                </div>
+                <form id="qrUploadForm" class="qr-upload-form">
+                    <label for="qrImageInput">Payment QR image (JPG, PNG, WebP; max 5 MB)</label>
+                    <input id="qrImageInput" type="file" accept="image/jpeg,image/png,image/webp" required>
+                    <button class="secondary-button" type="submit">Upload / replace QR</button>
+                    <button id="removeQrButton" class="table-action danger" type="button">Remove QR</button>
+                    <p id="qrAdminStatus" class="form-status" role="status" aria-live="polite"></p>
+                </form>
+            </section>
+
+            <section class="premium-admin-section" aria-labelledby="paymentRequestsTitle">
+                <div>
+                    <h2 id="paymentRequestsTitle">Manual payment requests</h2>
+                    <p class="muted">Pending requests do not expire. Verify the UTR and screenshot, then select the plan to activate.</p>
+                    <p id="paymentRequestsSummary" class="form-status" role="status">Loading payment requests…</p>
+                </div>
+                <div class="admin-table-wrap">
+                    <table>
+                        <thead><tr><th>User</th><th>Plan requested</th><th>Amount / coupon</th><th>UTR / proof</th><th>Submitted</th><th>Plan to activate</th><th>Amount received</th><th>Actions</th></tr></thead>
+                        <tbody id="paymentRequestsBody"><tr><td colspan="8">Sign in to load payment requests.</td></tr></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="premium-admin-section" aria-labelledby="premiumAdminCouponsTitle">
+                <div class="premium-admin-heading">
+                    <div>
+                        <h2 id="premiumAdminCouponsTitle">Premium coupons</h2>
+                        <p class="muted">Create percentage discounts. Applied discounts and coupon codes appear with the payment request.</p>
+                    </div>
+                </div>
+                <form id="couponCreateForm" class="coupon-create-form">
+                    <label>Code (leave empty to generate)
+                        <input id="couponCodeInput" maxlength="32" pattern="[A-Za-z0-9_-]{4,32}" placeholder="OMExxxxxxxx">
+                    </label>
+                    <label>Discount %
+                        <input id="couponDiscountInput" type="number" min="1" max="90" value="10" required>
+                    </label>
+                    <label>Maximum uses
+                        <input id="couponUsesInput" type="number" min="1" max="100000" value="100" required>
+                    </label>
+                    <label>Expires (optional)
+                        <input id="couponExpiryInput" type="datetime-local">
+                    </label>
+                    <button class="secondary-button" type="submit">Create coupon</button>
+                    <p id="couponAdminStatus" class="form-status" role="status" aria-live="polite"></p>
+                </form>
+                <div class="admin-table-wrap">
+                    <table>
+                        <thead><tr><th>Code</th><th>Discount</th><th>Uses</th><th>Expires</th></tr></thead>
+                        <tbody id="couponTableBody"><tr><td colspan="4">Sign in to load coupons.</td></tr></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="premium-admin-section" aria-labelledby="premiumMembersTitle">
+                <div>
+                    <h2 id="premiumMembersTitle">Premium accounts</h2>
+                    <p class="muted">Review plan, expiry/grace, and lock status. Users get a 24-hour grace period after expiry.</p>
+                </div>
+                <div class="admin-table-wrap">
+                    <table>
+                        <thead><tr><th>Username</th><th>Email</th><th>Plan</th><th>Premium expires</th><th>Status</th><th>Actions</th></tr></thead>
+                        <tbody id="premiumMembersBody"><tr><td colspan="6">Sign in to load accounts.</td></tr></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="premium-admin-section" aria-labelledby="deletionRequestsTitle">
+                <div>
+                    <h2 id="deletionRequestsTitle">Account deletion requests</h2>
+                    <p class="muted">Permanently deleting an account also deletes its messages, payment proof, and account history.</p>
+                </div>
+                <div class="admin-table-wrap">
+                    <table>
+                        <thead><tr><th>Username</th><th>Email</th><th>Reason</th><th>Requested</th><th>Action</th></tr></thead>
+                        <tbody id="deletionRequestsBody"><tr><td colspan="5">Sign in to load requests.</td></tr></tbody>
+                    </table>
+                </div>
             </section>
         </section>
     </main>

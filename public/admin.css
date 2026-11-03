@@ -337,6 +337,206 @@ button:disabled {
     text-align: right;
 }
 
+.moderation-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.report-detail {
+    margin-top: 20px;
+    padding: 18px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: #fbfdfb;
+}
+
+.report-detail h3 {
+    margin: 0 0 6px;
+    font-size: 15px;
+}
+
+.report-transcript {
+    display: grid;
+    gap: 8px;
+    max-height: 360px;
+    margin: 16px 0;
+    padding: 0 0 0 28px;
+    overflow-y: auto;
+}
+
+.report-transcript li {
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    background: white;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.report-audit-log {
+    display: grid;
+    gap: 5px;
+    margin: 8px 0 16px;
+    padding-left: 20px;
+    color: var(--muted);
+    font-size: 11px;
+    overflow-wrap: anywhere;
+}
+
+.report-transcript time {
+    display: block;
+    margin-bottom: 4px;
+    color: var(--muted);
+    font-size: 10px;
+}
+
+.review-note-label {
+    display: grid;
+    gap: 6px;
+    margin-bottom: 10px;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.review-note-label textarea {
+    width: 100%;
+    padding: 9px;
+    border: 1px solid #cbd7d0;
+    border-radius: 6px;
+    color: var(--ink);
+    resize: vertical;
+}
+
+.premium-admin-section {
+    margin-top: 20px;
+    padding: 22px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: var(--white);
+}
+
+.premium-admin-section h2 {
+    margin-bottom: 5px;
+    font-size: 18px;
+}
+
+.premium-admin-section .muted {
+    margin-bottom: 0;
+}
+
+.coupon-create-form {
+    display: grid;
+    grid-template-columns: 1.5fr .7fr .8fr 1.2fr auto;
+    align-items: end;
+    gap: 10px;
+    margin: 20px 0;
+}
+
+.coupon-create-form label {
+    display: grid;
+    gap: 6px;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.coupon-create-form input {
+    width: 100%;
+    min-width: 0;
+    min-height: 40px;
+    padding: 8px 10px;
+    border: 1px solid #cbd7d0;
+    border-radius: 6px;
+    background: #fbfdfb;
+    color: var(--ink);
+}
+
+.qr-upload-form {
+    display: flex;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.qr-upload-form label {
+    display: grid;
+    flex: 1 1 280px;
+    gap: 6px;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.qr-upload-form input,
+.payment-review-control {
+    min-height: 36px;
+    padding: 7px 9px;
+    border: 1px solid #cbd7d0;
+    border-radius: 5px;
+    background: var(--white);
+    color: var(--ink);
+}
+
+.payment-review-control {
+    width: 110px;
+    margin: 2px;
+}
+
+.payment-plan-control { width: 125px; }
+.payment-proof-link { color: var(--blue); font-weight: 700; }
+
+.admin-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+}
+
+.admin-table-wrap table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    text-align: left;
+}
+
+.admin-table-wrap th,
+.admin-table-wrap td {
+    padding: 11px 9px;
+    border-top: 1px solid var(--line);
+    white-space: nowrap;
+}
+
+.admin-table-wrap th {
+    color: var(--muted);
+    font-size: 10px;
+    text-transform: uppercase;
+}
+
+.table-action {
+    min-height: 30px;
+    margin-right: 5px;
+    padding: 0 8px;
+    border: 1px solid #cbd7d0;
+    border-radius: 5px;
+    background: white;
+    color: var(--ink);
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.table-action.danger {
+    border-color: #e7c7c1;
+    color: #9b4438;
+}
+
+.table-action.success {
+    border-color: #a7d7bd;
+    color: #176f4c;
+}
+
 [hidden] {
     display: none !important;
 }
@@ -356,6 +556,14 @@ button:disabled {
         align-items: flex-start;
         flex-direction: column;
         gap: 15px;
+    }
+
+    .moderation-heading {
+        flex-direction: column;
+    }
+
+    .report-detail {
+        padding: 12px;
     }
 
     .dashboard-actions {
@@ -379,6 +587,15 @@ button:disabled {
     .metric-grid {
         grid-template-columns: 1fr;
         gap: 10px;
+    }
+
+    .coupon-create-form {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .coupon-create-form button,
+    .coupon-create-form .form-status {
+        grid-column: 1 / -1;
     }
 
     .metric {
