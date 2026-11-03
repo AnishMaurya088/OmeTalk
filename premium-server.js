@@ -10,6 +10,7 @@ const CHAT_TTL_HOURS = 24;
 const SINGLE_VIEW_TTL_SECONDS = 60;
 const MAX_MEDIA_BYTES = 25 * 1024 * 1024;
 const MAX_PAYMENT_PROOF_BYTES = 5 * 1024 * 1024;
+const MAX_PROFILE_AVATAR_BYTES = 2 * 1024 * 1024;
 const PREMIUM_GRACE_HOURS = 24;
 const DATABASE_KEEPALIVE_INTERVAL_MS = process.env.DATABASE_KEEPALIVE_INTERVAL_MS
     ? Number(process.env.DATABASE_KEEPALIVE_INTERVAL_MS)
@@ -49,8 +50,9 @@ const mediaUpload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: MAX_MEDIA_BYTES, files: 1, fields: 2, fieldSize: 2000 },
     fileFilter(req, file, callback) {
-        if (!file.mimetype.startsWith("audio/") && !file.mimetype.startsWith("video/")) {
-            callback(new Error("Only audio or video files can be sent."));
+        if (!file.mimetype.startsWith("audio/") && !file.mimetype.startsWith("video/") &&
+            !["image/jpeg", "image/png", "image/webp"].includes(file.mimetype)) {
+            callback(new Error("Only JPG, PNG, WebP, audio, or video files can be sent."));
             return;
         }
         callback(null, true);
@@ -75,6 +77,18 @@ const paymentQrUpload = multer({
     fileFilter(req, file, callback) {
         if (!["image/jpeg", "image/png", "image/webp"].includes(file.mimetype)) {
             callback(new Error("Upload a JPG, PNG, or WebP QR image."));
+            return;
+        }
+        callback(null, true);
+    }
+});
+
+const profileAvatarUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: MAX_PROFILE_AVATAR_BYTES, files: 1, fields: 0 },
+    fileFilter(req, file, callback) {
+        if (!["image/jpeg", "image/png", "image/webp"].includes(file.mimetype)) {
+            callback(new Error("Upload a JPG, PNG, or WebP profile picture."));
             return;
         }
         callback(null, true);
@@ -172,13 +186,14 @@ function uploadPremiumMedia(req, res, next) {
         const status = error.code === "LIMIT_FILE_SIZE" ? 413 : 400;
         res.status(status).json({
             error: error.code === "LIMIT_FILE_SIZE"
-                ? "Audio/video messages are limited to 25 MB."
+                ? "Image, audio, and video messages are limited to 25 MB."
                 : error.message
         });
     });
 }
 
 function detectMediaType(buffer, declaredType) {
+    if (declaredType.startsWith("image/")) return detectImageType(buffer);
     const declaredAudio = declaredType.startsWith("audio/");
     if (buffer.length >= 4 &&
         buffer[0] === 0x1a && buffer[1] === 0x45 && buffer[2] === 0xdf && buffer[3] === 0xa3) {
@@ -225,7 +240,38 @@ function detectImageType(buffer) {
     return null;
 }
 
-function uploadError(upload) {
+function normalizeProfileInput(profile) {
+    if (!profile || typeof profile !== "object" || Array.isArray(profile)) return null;
+    const displayName = typeof profile.displayName === "string" ? profile.displayName.trim() : null;
+    const bio = typeof profile.bio === "string" ? profile.bio.trim() : null;
+    const country = typeof profile.country === "string" ? profile.country.trim() : null;
+    const language = typeof profile.language === "string" ? profile.language.trim() : null;
+    const interests = profile.interests;
+    if (displayName === null || displayName.length > 50 ||
+        bio === null || bio.length > 160 ||
+        country === null || country.length > 80 ||
+        language === null || language.length > 50 ||
+        !Array.isArray(interests) || interests.length > 10 ||
+        interests.some((interest) => typeof interest !== "string" || interest.trim().length > 32) ||
+        typeof profile.profilePrivate !== "boolean") {
+        return null;
+    }
+    const normalizedInterests = [...new Map(interests
+        .map((interest) => interest.trim())
+        .filter(Boolean)
+        .map((interest) => [interest.toLocaleLowerCase(), interest])).values()];
+    if (normalizedInterests.length > 10) return null;
+    return {
+        displayName,
+        bio,
+        country,
+        language,
+        interests: normalizedInterests,
+        profilePrivate: profile.profilePrivate
+    };
+}
+
+function uploadError(upload, tooLargeMessage = "The image must be 5 MB or smaller.") {
     return (req, res, next) => upload(req, res, (error) => {
         if (!error) {
             next();
@@ -234,7 +280,7 @@ function uploadError(upload) {
         const status = error.code === "LIMIT_FILE_SIZE" ? 413 : 400;
         res.status(status).json({
             error: error.code === "LIMIT_FILE_SIZE"
-                ? "The image must be 5 MB or smaller."
+                ? tooLargeMessage
                 : error.message
         });
     });
@@ -242,6 +288,10 @@ function uploadError(upload) {
 
 const uploadPaymentProof = uploadError(paymentProofUpload.single("proof"));
 const uploadPaymentQr = uploadError(paymentQrUpload.single("qr"));
+const uploadProfileAvatar = uploadError(
+    profileAvatarUpload.single("avatar"),
+    "Profile pictures are limited to 2 MB."
+);
 
 function getPremiumPlan(planId) {
     return typeof planId === "string" ? PREMIUM_PLANS[planId] || null : null;
@@ -319,6 +369,17 @@ async function areFriends(userId, friendId, client = pool) {
     return result.rowCount > 0;
 }
 
+async function areBlocked(userId, otherUserId, client = pool) {
+    const result = await client.query(
+        `SELECT 1 FROM premium_blocks
+         WHERE (blocker_id = $1 AND blocked_id = $2)
+            OR (blocker_id = $2 AND blocked_id = $1)
+         LIMIT 1`,
+        [userId, otherUserId]
+    );
+    return result.rowCount > 0;
+}
+
 async function initializePremiumDatabase() {
     if (!pool) {
         console.warn("Premium features are disabled: configure DATABASE_URL or POSTGRES_URL.");
@@ -347,7 +408,15 @@ async function initializePremiumDatabase() {
             ADD COLUMN IF NOT EXISTS date_of_birth DATE,
             ADD COLUMN IF NOT EXISTS premium_plan TEXT,
             ADD COLUMN IF NOT EXISTS premium_locked_at TIMESTAMPTZ,
-            ADD COLUMN IF NOT EXISTS premium_locked_reason TEXT;
+            ADD COLUMN IF NOT EXISTS premium_locked_reason TEXT,
+            ADD COLUMN IF NOT EXISTS display_name TEXT NOT NULL DEFAULT '',
+            ADD COLUMN IF NOT EXISTS bio TEXT NOT NULL DEFAULT '',
+            ADD COLUMN IF NOT EXISTS country TEXT NOT NULL DEFAULT '',
+            ADD COLUMN IF NOT EXISTS language TEXT NOT NULL DEFAULT '',
+            ADD COLUMN IF NOT EXISTS interests JSONB NOT NULL DEFAULT '[]'::jsonb,
+            ADD COLUMN IF NOT EXISTS profile_private BOOLEAN NOT NULL DEFAULT FALSE,
+            ADD COLUMN IF NOT EXISTS avatar_mime_type TEXT,
+            ADD COLUMN IF NOT EXISTS avatar_data BYTEA;
         CREATE UNIQUE INDEX IF NOT EXISTS premium_users_username_lower_idx
             ON premium_users (LOWER(username));
         CREATE TABLE IF NOT EXISTS premium_password_resets (
@@ -414,6 +483,26 @@ async function initializePremiumDatabase() {
             added_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             PRIMARY KEY (user_id, friend_id),
             CHECK (user_id <> friend_id)
+        );
+        CREATE TABLE IF NOT EXISTS premium_friend_requests (
+            sender_id TEXT NOT NULL REFERENCES premium_users(id) ON DELETE CASCADE,
+            recipient_id TEXT NOT NULL REFERENCES premium_users(id) ON DELETE CASCADE,
+            status TEXT NOT NULL DEFAULT 'pending'
+                CHECK (status IN ('pending', 'accepted', 'rejected')),
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (sender_id, recipient_id),
+            CHECK (sender_id <> recipient_id)
+        );
+        CREATE INDEX IF NOT EXISTS premium_friend_requests_incoming_idx
+            ON premium_friend_requests(recipient_id, created_at DESC)
+            WHERE status = 'pending';
+        CREATE TABLE IF NOT EXISTS premium_blocks (
+            blocker_id TEXT NOT NULL REFERENCES premium_users(id) ON DELETE CASCADE,
+            blocked_id TEXT NOT NULL REFERENCES premium_users(id) ON DELETE CASCADE,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            PRIMARY KEY (blocker_id, blocked_id),
+            CHECK (blocker_id <> blocked_id)
         );
         CREATE TABLE IF NOT EXISTS premium_invites (
             token_hash TEXT PRIMARY KEY,
@@ -500,6 +589,37 @@ async function initializePremiumDatabase() {
 function attachPremiumRoutes(app, io, requireAdmin, recordConnection) {
     const premiumIo = io.of("/premium");
     const randomPartnersByUser = new Map();
+    const waitingPremium = [];
+    const activePremiumPartners = new Map();
+    const socketsByUser = new Map();
+
+    function endPremiumPairForUsers(userId, otherUserId, eventName) {
+        const userSockets = socketsByUser.get(userId) || [];
+        for (const socketId of userSockets) {
+            const partnerSocketId = activePremiumPartners.get(socketId);
+            const partnerSocket = partnerSocketId && premiumIo.sockets.sockets.get(partnerSocketId);
+            if (!partnerSocket || partnerSocket.data.premiumUser.id !== otherUserId) continue;
+            activePremiumPartners.delete(socketId);
+            activePremiumPartners.delete(partnerSocketId);
+            randomPartnersByUser.delete(userId);
+            randomPartnersByUser.delete(otherUserId);
+            const eventData = {
+                userId,
+                otherUserId,
+                blocked: eventName === "premium-contact-blocked"
+            };
+            premiumIo.sockets.sockets.get(socketId)?.emit(eventName, eventData);
+            partnerSocket.emit(eventName, eventData);
+        }
+        for (const socketId of socketsByUser.get(userId) || []) {
+            const index = waitingPremium.indexOf(socketId);
+            if (index >= 0) waitingPremium.splice(index, 1);
+        }
+        for (const socketId of socketsByUser.get(otherUserId) || []) {
+            const index = waitingPremium.indexOf(socketId);
+            if (index >= 0) waitingPremium.splice(index, 1);
+        }
+    }
 
     app.get("/premium", (req, res) => {
         res.set("Cache-Control", "no-store");
@@ -895,7 +1015,8 @@ function attachPremiumRoutes(app, io, requireAdmin, recordConnection) {
 
     app.get("/api/premium/friends", requireActivePremium, asyncRoute(async (req, res) => {
         const result = await pool.query(
-            `SELECT u.id, u.username
+            `SELECT u.id, u.username, u.display_name AS "displayName",
+                    u.avatar_mime_type IS NOT NULL AS "hasAvatar"
              FROM premium_friends f
              JOIN premium_users u ON u.id = f.friend_id
              WHERE f.user_id = $1
@@ -905,9 +1026,235 @@ function attachPremiumRoutes(app, io, requireAdmin, recordConnection) {
         res.json({ friends: result.rows });
     }));
 
+    app.delete("/api/premium/friends/:friendId", requireUser, asyncRoute(async (req, res) => {
+        const friendId = req.params.friendId;
+        if (friendId === req.premiumUser.id) {
+            res.status(400).json({ error: "You cannot remove yourself as a friend." });
+            return;
+        }
+        const client = await pool.connect();
+        try {
+            await client.query("BEGIN");
+            const removed = await client.query(
+                `DELETE FROM premium_friends
+                 WHERE (user_id = $1 AND friend_id = $2)
+                    OR (user_id = $2 AND friend_id = $1)
+                 RETURNING user_id`,
+                [req.premiumUser.id, friendId]
+            );
+            if (!removed.rowCount) {
+                await client.query("ROLLBACK");
+                res.status(404).json({ error: "This account is not in your friends list." });
+                return;
+            }
+            await client.query(
+                `DELETE FROM premium_friend_requests
+                 WHERE (sender_id = $1 AND recipient_id = $2)
+                    OR (sender_id = $2 AND recipient_id = $1)`,
+                [req.premiumUser.id, friendId]
+            );
+            await client.query("COMMIT");
+        } catch (error) {
+            await client.query("ROLLBACK");
+            throw error;
+        } finally {
+            client.release();
+        }
+        endPremiumPairForUsers(req.premiumUser.id, friendId, "premium-friendship-ended");
+        premiumIo.to(`premium-user:${req.premiumUser.id}`)
+            .to(`premium-user:${friendId}`).emit("premium-friendship-ended", {
+                userId: req.premiumUser.id,
+                otherUserId: friendId,
+                blocked: false
+            });
+        res.json({ success: true });
+    }));
+
+    app.get("/api/premium/blocks", requireUser, asyncRoute(async (req, res) => {
+        const result = await pool.query(
+            `SELECT u.id, u.username
+             FROM premium_blocks b JOIN premium_users u ON u.id = b.blocked_id
+             WHERE b.blocker_id = $1 ORDER BY LOWER(u.username)`,
+            [req.premiumUser.id]
+        );
+        res.json({ blockedUsers: result.rows });
+    }));
+
+    app.post("/api/premium/blocks/:userId", requireUser, asyncRoute(async (req, res) => {
+        const blockedId = req.params.userId;
+        if (blockedId === req.premiumUser.id) {
+            res.status(400).json({ error: "You cannot block your own account." });
+            return;
+        }
+        const target = await pool.query("SELECT id FROM premium_users WHERE id = $1", [blockedId]);
+        if (!target.rowCount) {
+            res.status(404).json({ error: "Account was not found." });
+            return;
+        }
+        const client = await pool.connect();
+        try {
+            await client.query("BEGIN");
+            await client.query(
+                `INSERT INTO premium_blocks (blocker_id, blocked_id) VALUES ($1, $2)
+                 ON CONFLICT DO NOTHING`,
+                [req.premiumUser.id, blockedId]
+            );
+            await client.query(
+                `DELETE FROM premium_friends
+                 WHERE (user_id = $1 AND friend_id = $2)
+                    OR (user_id = $2 AND friend_id = $1)`,
+                [req.premiumUser.id, blockedId]
+            );
+            await client.query(
+                `UPDATE premium_friend_requests SET status = 'rejected', updated_at = NOW()
+                 WHERE status = 'pending'
+                   AND ((sender_id = $1 AND recipient_id = $2)
+                     OR (sender_id = $2 AND recipient_id = $1))`,
+                [req.premiumUser.id, blockedId]
+            );
+            await client.query("COMMIT");
+        } catch (error) {
+            await client.query("ROLLBACK");
+            throw error;
+        } finally {
+            client.release();
+        }
+        endPremiumPairForUsers(req.premiumUser.id, blockedId, "premium-contact-blocked");
+        premiumIo.to(`premium-user:${req.premiumUser.id}`)
+            .to(`premium-user:${blockedId}`).emit("premium-contact-blocked", {
+                userId: req.premiumUser.id,
+                otherUserId: blockedId,
+                blocked: true
+            });
+        res.json({ success: true });
+    }));
+
+    app.delete("/api/premium/blocks/:userId", requireUser, asyncRoute(async (req, res) => {
+        await pool.query(
+            "DELETE FROM premium_blocks WHERE blocker_id = $1 AND blocked_id = $2",
+            [req.premiumUser.id, req.params.userId]
+        );
+        res.json({ success: true });
+    }));
+
+    app.get("/api/premium/friend-requests", requireActivePremium, asyncRoute(async (req, res) => {
+        const [incoming, outgoing] = await Promise.all([
+            pool.query(
+                `SELECT r.sender_id AS id, u.username, r.created_at AS "createdAt"
+                 FROM premium_friend_requests r
+                 JOIN premium_users u ON u.id = r.sender_id
+                 WHERE r.recipient_id = $1 AND r.status = 'pending'
+                 ORDER BY r.created_at DESC`,
+                [req.premiumUser.id]
+            ),
+            pool.query(
+                `SELECT r.recipient_id AS id, u.username, r.created_at AS "createdAt"
+                 FROM premium_friend_requests r
+                 JOIN premium_users u ON u.id = r.recipient_id
+                 WHERE r.sender_id = $1 AND r.status = 'pending'
+                 ORDER BY r.created_at DESC`,
+                [req.premiumUser.id]
+            )
+        ]);
+        res.json({ incoming: incoming.rows, outgoing: outgoing.rows });
+    }));
+
+    app.get("/api/premium/profile", requireUser, asyncRoute(async (req, res) => {
+        const result = await pool.query(
+            `SELECT username, display_name AS "displayName", bio, country, language,
+                    interests, profile_private AS "profilePrivate",
+                    avatar_mime_type IS NOT NULL AS "hasAvatar"
+             FROM premium_users WHERE id = $1`,
+            [req.premiumUser.id]
+        );
+        if (!result.rowCount) {
+            res.status(404).json({ error: "Account profile was not found." });
+            return;
+        }
+        res.set("Cache-Control", "no-store");
+        res.json({ profile: result.rows[0] });
+    }));
+
+    app.put("/api/premium/profile", requireUser, asyncRoute(async (req, res) => {
+        const profile = normalizeProfileInput(req.body);
+        if (!profile) {
+            res.status(400).json({ error: "Check the profile fields and their length limits, then try again." });
+            return;
+        }
+        const result = await pool.query(
+            `UPDATE premium_users
+             SET display_name = $2, bio = $3, country = $4, language = $5,
+                 interests = $6::jsonb, profile_private = $7
+             WHERE id = $1
+             RETURNING username, display_name AS "displayName", bio, country, language,
+                       interests, profile_private AS "profilePrivate"`,
+            [req.premiumUser.id, profile.displayName, profile.bio, profile.country, profile.language,
+                JSON.stringify(profile.interests), profile.profilePrivate]
+        );
+        res.set("Cache-Control", "no-store");
+        res.json({ profile: result.rows[0] });
+    }));
+
+    app.get("/api/premium/profile/avatar", requireUser, asyncRoute(async (req, res) => {
+        const userId = typeof req.query.userId === "string" ? req.query.userId : req.premiumUser.id;
+        if (userId !== req.premiumUser.id &&
+            await areBlocked(req.premiumUser.id, userId)) {
+            res.status(404).json({ error: "Profile picture was not found." });
+            return;
+        }
+        const result = await pool.query(
+            `SELECT avatar_mime_type, avatar_data, profile_private
+             FROM premium_users WHERE id = $1`,
+            [userId]
+        );
+        if (!result.rowCount || !result.rows[0].avatar_data) {
+            res.status(404).json({ error: "Profile picture was not found." });
+            return;
+        }
+        if (userId !== req.premiumUser.id && result.rows[0].profile_private) {
+            const friendship = await areFriends(req.premiumUser.id, userId);
+            if (!friendship) {
+                res.status(403).json({ error: "This profile is private." });
+                return;
+            }
+        }
+        res.set({
+            "Cache-Control": "private, no-store",
+            "X-Content-Type-Options": "nosniff",
+            "Content-Type": result.rows[0].avatar_mime_type
+        });
+        res.send(result.rows[0].avatar_data);
+    }));
+
+    app.post("/api/premium/profile/avatar", requireUser, uploadProfileAvatar, asyncRoute(async (req, res) => {
+        if (!req.file) {
+            res.status(400).json({ error: "Choose a JPG, PNG, or WebP profile picture." });
+            return;
+        }
+        const mimeType = detectImageType(req.file.buffer);
+        if (!mimeType) {
+            res.status(400).json({ error: "The profile picture must be a valid JPG, PNG, or WebP image." });
+            return;
+        }
+        await pool.query(
+            `UPDATE premium_users SET avatar_mime_type = $2, avatar_data = $3 WHERE id = $1`,
+            [req.premiumUser.id, mimeType, req.file.buffer]
+        );
+        res.status(201).json({ success: true });
+    }));
+
+    app.delete("/api/premium/profile/avatar", requireUser, asyncRoute(async (req, res) => {
+        await pool.query(
+            `UPDATE premium_users SET avatar_mime_type = NULL, avatar_data = NULL WHERE id = $1`,
+            [req.premiumUser.id]
+        );
+        res.json({ success: true });
+    }));
+
     app.get("/api/premium/messages/:friendId", requireActivePremium, asyncRoute(async (req, res) => {
-        if (!await areFriends(req.premiumUser.id, req.params.friendId) &&
-            randomPartnersByUser.get(req.premiumUser.id) !== req.params.friendId) {
+        if (await areBlocked(req.premiumUser.id, req.params.friendId) ||
+            (!await areFriends(req.premiumUser.id, req.params.friendId) &&
+            randomPartnersByUser.get(req.premiumUser.id) !== req.params.friendId)) {
             res.status(403).json({ error: "You can only chat with an accepted friend." });
             return;
         }
@@ -976,8 +1323,9 @@ function attachPremiumRoutes(app, io, requireAdmin, recordConnection) {
             res.status(400).json({ error: "Choose an audio or video file to send." });
             return;
         }
-        if (!await areFriends(req.premiumUser.id, recipientId) &&
-            randomPartnersByUser.get(req.premiumUser.id) !== recipientId) {
+        if (await areBlocked(req.premiumUser.id, recipientId) ||
+            (!await areFriends(req.premiumUser.id, recipientId) &&
+            randomPartnersByUser.get(req.premiumUser.id) !== recipientId)) {
             res.status(403).json({ error: "You can only send media to an active chat or friend." });
             return;
         }
@@ -1040,8 +1388,9 @@ function attachPremiumRoutes(app, io, requireAdmin, recordConnection) {
         }
         const media = result.rows[0];
         const otherUserId = media.senderId === req.premiumUser.id ? media.recipientId : media.senderId;
-        if (!await areFriends(req.premiumUser.id, otherUserId) &&
-            randomPartnersByUser.get(req.premiumUser.id) !== otherUserId) {
+        if (await areBlocked(req.premiumUser.id, otherUserId) ||
+            (!await areFriends(req.premiumUser.id, otherUserId) &&
+            randomPartnersByUser.get(req.premiumUser.id) !== otherUserId)) {
             res.status(403).json({ error: "You can only open media from an active chat or friend." });
             return;
         }
@@ -1080,7 +1429,7 @@ function attachPremiumRoutes(app, io, requireAdmin, recordConnection) {
 
     app.post("/api/premium/friends/request", requireActivePremium, asyncRoute(async (req, res) => {
         const friend = await pool.query(
-            `SELECT id, premium_expires_at, premium_locked_at FROM premium_users
+            `SELECT id, username, premium_expires_at, premium_locked_at FROM premium_users
              WHERE LOWER(username) = LOWER($1)
                AND premium_locked_at IS NULL
                AND premium_expires_at + INTERVAL '${PREMIUM_GRACE_HOURS} hours' > NOW()`,
@@ -1096,13 +1445,140 @@ function attachPremiumRoutes(app, io, requireAdmin, recordConnection) {
             res.status(400).json({ error: "Both users need an active Premium membership to be friends." });
             return;
         }
-        await addFriendPair(req.premiumUser.id, friend.rows[0].id);
-        premiumIo.to(`premium-user:${friend.rows[0].id}`).emit("premium-friend-added", {
+        const friendId = friend.rows[0].id;
+        if (await areBlocked(req.premiumUser.id, friendId)) {
+            res.status(403).json({ error: "Friend requests are unavailable for this account." });
+            return;
+        }
+        if (await areFriends(req.premiumUser.id, friendId)) {
+            res.status(409).json({ error: "You are already friends." });
+            return;
+        }
+        const reciprocal = await pool.query(
+            `SELECT status FROM premium_friend_requests
+             WHERE sender_id = $1 AND recipient_id = $2`,
+            [friendId, req.premiumUser.id]
+        );
+        if (reciprocal.rows[0] && reciprocal.rows[0].status === "pending") {
+            const client = await pool.connect();
+            try {
+                await client.query("BEGIN");
+                await client.query(
+                    `UPDATE premium_friend_requests SET status = 'accepted', updated_at = NOW()
+                     WHERE (sender_id = $1 AND recipient_id = $2)
+                        OR (sender_id = $2 AND recipient_id = $1)`,
+                    [friendId, req.premiumUser.id]
+                );
+                await client.query(
+                    `INSERT INTO premium_friends (user_id, friend_id) VALUES ($1, $2), ($2, $1)
+                     ON CONFLICT DO NOTHING`,
+                    [req.premiumUser.id, friendId]
+                );
+                await client.query("COMMIT");
+            } catch (error) {
+                await client.query("ROLLBACK");
+                throw error;
+            } finally {
+                client.release();
+            }
+            const currentFriend = {
+                id: req.premiumUser.id,
+                username: req.premiumUser.username
+            };
+            const newFriend = { id: friendId, username: friend.rows[0].username };
+            premiumIo.to(`premium-user:${friendId}`).emit("premium-friend-added", currentFriend);
+            premiumIo.to(`premium-user:${req.premiumUser.id}`).emit("premium-friend-added", newFriend);
+            res.status(201).json({ success: true, accepted: true });
+            return;
+        }
+
+        const request = await pool.query(
+            `INSERT INTO premium_friend_requests (sender_id, recipient_id)
+             VALUES ($1, $2)
+             ON CONFLICT (sender_id, recipient_id)
+             DO UPDATE SET status = 'pending', created_at = NOW(), updated_at = NOW()
+             WHERE premium_friend_requests.status = 'rejected'
+             RETURNING sender_id`,
+            [req.premiumUser.id, friendId]
+        );
+        if (!request.rowCount) {
+            res.status(409).json({ error: "You already sent this friend request." });
+            return;
+        }
+        premiumIo.to(`premium-user:${friendId}`).emit("premium-friend-request", {
             id: req.premiumUser.id,
             username: req.premiumUser.username
         });
-        res.status(201).json({ success: true });
+        res.status(201).json({ success: true, requestSent: true });
     }));
+
+    app.post("/api/premium/friend-requests/:senderId/respond",
+        requireActivePremium,
+        asyncRoute(async (req, res) => {
+            const accept = req.body && req.body.accept;
+            if (typeof accept !== "boolean" || req.params.senderId === req.premiumUser.id) {
+                res.status(400).json({ error: "Choose whether to accept or reject this request." });
+                return;
+            }
+            if (await areBlocked(req.premiumUser.id, req.params.senderId)) {
+                res.status(403).json({ error: "This friend request is unavailable." });
+                return;
+            }
+            const client = await pool.connect();
+            let sender;
+            try {
+                await client.query("BEGIN");
+                const request = await client.query(
+                    `SELECT u.id, u.username
+                     FROM premium_friend_requests r
+                     JOIN premium_users u ON u.id = r.sender_id
+                     WHERE r.sender_id = $1 AND r.recipient_id = $2 AND r.status = 'pending'
+                     FOR UPDATE OF r`,
+                    [req.params.senderId, req.premiumUser.id]
+                );
+                if (!request.rowCount) {
+                    await client.query("ROLLBACK");
+                    res.status(404).json({ error: "This friend request is no longer pending." });
+                    return;
+                }
+                sender = request.rows[0];
+                await client.query(
+                    `UPDATE premium_friend_requests SET status = $3, updated_at = NOW()
+                     WHERE sender_id = $1 AND recipient_id = $2`,
+                    [sender.id, req.premiumUser.id, accept ? "accepted" : "rejected"]
+                );
+                await client.query(
+                    `UPDATE premium_friend_requests SET status = $3, updated_at = NOW()
+                     WHERE sender_id = $2 AND recipient_id = $1 AND status = 'pending'`,
+                    [sender.id, req.premiumUser.id, accept ? "accepted" : "rejected"]
+                );
+                if (accept) {
+                    await client.query(
+                        `INSERT INTO premium_friends (user_id, friend_id) VALUES ($1, $2), ($2, $1)
+                         ON CONFLICT DO NOTHING`,
+                        [req.premiumUser.id, sender.id]
+                    );
+                }
+                await client.query("COMMIT");
+            } catch (error) {
+                await client.query("ROLLBACK");
+                throw error;
+            } finally {
+                client.release();
+            }
+            if (accept) {
+                premiumIo.to(`premium-user:${sender.id}`).emit("premium-friend-added", {
+                    id: req.premiumUser.id,
+                    username: req.premiumUser.username
+                });
+                premiumIo.to(`premium-user:${req.premiumUser.id}`).emit("premium-friend-added", sender);
+            }
+            premiumIo.to(`premium-user:${sender.id}`).emit("premium-friend-request-updated", {
+                recipientId: req.premiumUser.id,
+                accepted: accept
+            });
+            res.json({ success: true, accepted: accept });
+        }));
 
     app.post("/api/premium/invites", requireActivePremium, asyncRoute(async (req, res) => {
         const token = crypto.randomBytes(32).toString("hex");
@@ -1133,16 +1609,36 @@ function attachPremiumRoutes(app, io, requireAdmin, recordConnection) {
     }));
 
     app.get("/api/premium/user/:userId", requireActivePremium, asyncRoute(async (req, res) => {
+        if (req.params.userId !== req.premiumUser.id &&
+            await areBlocked(req.premiumUser.id, req.params.userId)) {
+            res.status(404).json({ error: "Premium user was not found." });
+            return;
+        }
         const result = await pool.query(
-            `SELECT u.id, u.username FROM premium_users u
+            `SELECT u.id, u.username, u.display_name AS "displayName", u.bio,
+                    u.country, u.language, u.interests,
+                    u.profile_private AS "profilePrivate",
+                    u.avatar_mime_type IS NOT NULL AS "hasAvatar",
+                    EXISTS (
+                        SELECT 1 FROM premium_friends f
+                        WHERE f.user_id = $2 AND f.friend_id = u.id
+                    ) AS "isFriend"
+             FROM premium_users u
              WHERE u.id = $1 AND u.premium_locked_at IS NULL
                AND u.premium_expires_at + INTERVAL '${PREMIUM_GRACE_HOURS} hours' > NOW()`,
-            [req.params.userId]
+            [req.params.userId, req.premiumUser.id]
         );
         if (!result.rowCount) {
             res.status(404).json({ error: "Premium user was not found." });
             return;
         }
+        if (result.rows[0].profilePrivate && !result.rows[0].isFriend &&
+            result.rows[0].id !== req.premiumUser.id) {
+            res.status(403).json({ error: "This profile is private." });
+            return;
+        }
+        delete result.rows[0].profilePrivate;
+        delete result.rows[0].isFriend;
         res.json(result.rows[0]);
     }));
 
@@ -1622,10 +2118,6 @@ function attachPremiumRoutes(app, io, requireAdmin, recordConnection) {
             }
         });
 
-        const waitingPremium = [];
-        const activePremiumPartners = new Map();
-        const socketsByUser = new Map();
-
         premiumIo.on("connection", (socket) => {
             const user = socket.data.premiumUser;
             recordConnection();
@@ -1642,9 +2134,14 @@ function attachPremiumRoutes(app, io, requireAdmin, recordConnection) {
                     socket.emit("premium-waiting");
                     return;
                 }
-                const partnerIndex = waitingPremium.findIndex((socketId) =>
-                    premiumIo.sockets.sockets.get(socketId)?.data.premiumUser.id !== user.id
-                );
+                let partnerIndex = -1;
+                for (let index = 0; index < waitingPremium.length; index += 1) {
+                    const candidate = premiumIo.sockets.sockets.get(waitingPremium[index]);
+                    if (!candidate || candidate.data.premiumUser.id === user.id) continue;
+                    if (await areBlocked(user.id, candidate.data.premiumUser.id)) continue;
+                    partnerIndex = index;
+                    break;
+                }
                 if (partnerIndex < 0) {
                     waitingPremium.push(socket.id);
                     socket.emit("premium-waiting");
@@ -1699,10 +2196,41 @@ function attachPremiumRoutes(app, io, requireAdmin, recordConnection) {
                     return;
                 }
                 try {
-                    await addFriendPair(user.id, partnerSocket.data.premiumUser.id);
-                    socket.emit("premium-friend-added", partnerSocket.data.premiumUser);
-                    partnerSocket.emit("premium-friend-added", user);
-                    if (typeof acknowledge === "function") acknowledge({ success: true });
+                    if (await areBlocked(user.id, partnerSocket.data.premiumUser.id)) {
+                        if (typeof acknowledge === "function") {
+                            acknowledge({ error: "Friend requests are unavailable for this account." });
+                        }
+                        return;
+                    }
+                    const target = partnerSocket.data.premiumUser;
+                    if (await areFriends(user.id, target.id)) {
+                        if (typeof acknowledge === "function") {
+                            acknowledge({ success: true, alreadyFriends: true });
+                        }
+                        return;
+                    }
+                    const request = await pool.query(
+                        `INSERT INTO premium_friend_requests (sender_id, recipient_id)
+                         VALUES ($1, $2)
+                         ON CONFLICT (sender_id, recipient_id)
+                         DO UPDATE SET status = 'pending', created_at = NOW(), updated_at = NOW()
+                         WHERE premium_friend_requests.status = 'rejected'
+                         RETURNING sender_id`,
+                        [user.id, target.id]
+                    );
+                    if (!request.rowCount) {
+                        if (typeof acknowledge === "function") {
+                            acknowledge({ error: "You already sent this friend request." });
+                        }
+                        return;
+                    }
+                    partnerSocket.emit("premium-friend-request", {
+                        id: user.id,
+                        username: user.username
+                    });
+                    if (typeof acknowledge === "function") {
+                        acknowledge({ success: true, requestSent: true });
+                    }
                 } catch (error) {
                     console.error("Could not add premium friends:", error.message);
                     if (typeof acknowledge === "function") acknowledge({ error: "Could not add friend." });
@@ -1714,6 +2242,7 @@ function attachPremiumRoutes(app, io, requireAdmin, recordConnection) {
                     const friendId = String(data && data.friendId || "");
                     const body = String(data && data.message || "").trim();
                     if (!body || body.length > 2000 ||
+                        await areBlocked(user.id, friendId) ||
                         (!await areFriends(user.id, friendId) && randomPartnersByUser.get(user.id) !== friendId)) {
                         if (typeof acknowledge === "function") acknowledge({ error: "Invalid message or friend." });
                         return;
@@ -1766,6 +2295,7 @@ function attachPremiumRoutes(app, io, requireAdmin, recordConnection) {
                 try {
                     const recipientId = String(data && data.recipientId || "");
                     if (!["offer", "answer", "ice", "end"].includes(data && data.type) ||
+                        await areBlocked(user.id, recipientId) ||
                         !await areFriends(user.id, recipientId)) return;
                     premiumIo.to(`premium-user:${recipientId}`).emit("premium-call-signal", {
                         type: data.type,
@@ -1903,6 +2433,17 @@ async function acceptFriendInvite(tokenHash, friendId) {
         }
 
         const inviter = result.rows[0];
+        const block = await client.query(
+            `SELECT 1 FROM premium_blocks
+             WHERE (blocker_id = $1 AND blocked_id = $2)
+                OR (blocker_id = $2 AND blocked_id = $1)
+             LIMIT 1`,
+            [inviter.id, friendId]
+        );
+        if (block.rowCount) {
+            await client.query("ROLLBACK");
+            return null;
+        }
         await client.query(
             `INSERT INTO premium_friends (user_id, friend_id) VALUES ($1, $2)
              ON CONFLICT DO NOTHING`,
@@ -1930,5 +2471,8 @@ async function acceptFriendInvite(tokenHash, friendId) {
 module.exports = {
     attachPremiumRoutes,
     initializePremiumDatabase,
+    normalizeProfileInput,
+    detectImageType,
+    detectMediaType,
     isPremiumDatabaseConfigured: Boolean(pool)
 };

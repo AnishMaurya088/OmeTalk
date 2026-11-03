@@ -4,7 +4,7 @@
   "main": "server.js",
   "scripts": {
     "check": "node --check server.js && node --check premium-server.js && node --check public/script.js && node --check public/premium.js && node --check public/admin.js && node --check public/feedback-page.js",
-    "test": "npm run check",
+    "test": "npm run check && node --test",
     "start": "node server.js"
   },
   "keywords": [],

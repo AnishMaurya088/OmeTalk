@@ -44,6 +44,12 @@ const paymentRequestStatus = document.getElementById("paymentRequestStatus");
 const paymentQrImage = document.getElementById("paymentQrImage");
 const paymentQrStatus = document.getElementById("paymentQrStatus");
 const paymentHistoryBody = document.getElementById("paymentHistoryBody");
+const profileForm = document.getElementById("profileForm");
+const profileAvatarInput = document.getElementById("profileAvatarInput");
+const profileAvatarPreview = document.getElementById("profileAvatarPreview");
+const profileStatus = document.getElementById("profileStatus");
+const profileSaveButton = document.getElementById("saveProfileButton");
+const removeProfileAvatarButton = document.getElementById("removeProfileAvatarButton");
 const deletionRequestStatus = document.getElementById("deletionRequestStatus");
 const deleteAccountRequestButton = document.getElementById("deleteAccountRequestButton");
 const cancelDeletionRequestButton = document.getElementById("cancelDeletionRequestButton");
@@ -79,6 +85,7 @@ let expiryTimers = new Map();
 let friendsById = new Map();
 let pendingCallIceCandidates = [];
 let mediaObjectUrls = new Map();
+let profileAvatarObjectUrl = null;
 
 const rtcConfiguration = {
     iceServers: [
@@ -361,6 +368,8 @@ async function loadAccount() {
         currentUser.deletionRequest.status === "pending"
         ? `Deletion requested ${new Date(currentUser.deletionRequest.requestedAt).toLocaleString()}. Admin will review it.`
         : "");
+    await loadProfile();
+    await loadBlockedUsers();
     await loadPremiumConfig();
     await loadPaymentHistory();
     if (active) {
@@ -368,6 +377,123 @@ async function loadAccount() {
         connectPremiumSocket();
     }
 }
+
+async function loadProfile() {
+    const { profile } = await api("/api/premium/profile");
+    document.getElementById("profileDisplayName").value = profile.displayName || "";
+    document.getElementById("profileBio").value = profile.bio || "";
+    document.getElementById("profileCountry").value = profile.country || "";
+    document.getElementById("profileLanguage").value = profile.language || "";
+    document.getElementById("profileInterests").value = Array.isArray(profile.interests)
+        ? profile.interests.join(", ")
+        : "";
+    document.getElementById("profilePrivate").checked = profile.profilePrivate;
+    removeProfileAvatarButton.hidden = !profile.hasAvatar;
+    if (profileAvatarObjectUrl) {
+        URL.revokeObjectURL(profileAvatarObjectUrl);
+        profileAvatarObjectUrl = null;
+    }
+    if (profile.hasAvatar) {
+        profileAvatarPreview.src = `/api/premium/profile/avatar?updated=${Date.now()}`;
+        profileAvatarPreview.hidden = false;
+    } else {
+        profileAvatarPreview.removeAttribute("src");
+        profileAvatarPreview.hidden = true;
+    }
+}
+
+async function loadBlockedUsers() {
+    const { blockedUsers } = await api("/api/premium/blocks");
+    const list = document.getElementById("blockedUsersList");
+    list.replaceChildren();
+    if (!blockedUsers.length) {
+        const empty = document.createElement("p");
+        empty.className = "muted";
+        empty.textContent = "You have not blocked anyone.";
+        list.appendChild(empty);
+        return;
+    }
+    for (const user of blockedUsers) {
+        const row = document.createElement("div");
+        row.className = "blocked-user-row";
+        const username = document.createElement("span");
+        username.textContent = user.username;
+        const unblockButton = document.createElement("button");
+        unblockButton.type = "button";
+        unblockButton.className = "secondary-button";
+        unblockButton.textContent = "Unblock";
+        unblockButton.addEventListener("click", async () => {
+            unblockButton.disabled = true;
+            try {
+                await api(`/api/premium/blocks/${encodeURIComponent(user.id)}`, { method: "DELETE" });
+                await loadBlockedUsers();
+                setStatus(profileStatus, `${user.username} was unblocked.`, "success");
+            } catch (error) {
+                setStatus(profileStatus, error.message, "error");
+                unblockButton.disabled = false;
+            }
+        });
+        row.append(username, unblockButton);
+        list.appendChild(row);
+    }
+}
+
+profileAvatarInput.addEventListener("change", () => {
+    const file = profileAvatarInput.files[0];
+    if (profileAvatarObjectUrl) URL.revokeObjectURL(profileAvatarObjectUrl);
+    profileAvatarObjectUrl = file ? URL.createObjectURL(file) : null;
+    if (profileAvatarObjectUrl) {
+        profileAvatarPreview.src = profileAvatarObjectUrl;
+        profileAvatarPreview.hidden = false;
+    }
+});
+
+profileForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    profileSaveButton.disabled = true;
+    setStatus(profileStatus, "Saving profile…");
+    try {
+        await api("/api/premium/profile", {
+            method: "PUT",
+            body: JSON.stringify({
+                displayName: document.getElementById("profileDisplayName").value,
+                bio: document.getElementById("profileBio").value,
+                country: document.getElementById("profileCountry").value,
+                language: document.getElementById("profileLanguage").value,
+                interests: document.getElementById("profileInterests").value
+                    .split(",").map((interest) => interest.trim()).filter(Boolean),
+                profilePrivate: document.getElementById("profilePrivate").checked
+            })
+        });
+        const avatar = profileAvatarInput.files[0];
+        if (avatar) {
+            const formData = new FormData();
+            formData.set("avatar", avatar);
+            await api("/api/premium/profile/avatar", { method: "POST", body: formData });
+        }
+        profileForm.reset();
+        await loadProfile();
+        setStatus(profileStatus, "Profile saved.", "success");
+    } catch (error) {
+        setStatus(profileStatus, error.message, "error");
+    } finally {
+        profileSaveButton.disabled = false;
+    }
+});
+
+removeProfileAvatarButton.addEventListener("click", async () => {
+    removeProfileAvatarButton.disabled = true;
+    try {
+        await api("/api/premium/profile/avatar", { method: "DELETE" });
+        profileAvatarInput.value = "";
+        await loadProfile();
+        setStatus(profileStatus, "Profile picture removed.", "success");
+    } catch (error) {
+        setStatus(profileStatus, error.message, "error");
+    } finally {
+        removeProfileAvatarButton.disabled = false;
+    }
+});
 
 async function acceptPendingInvite() {
     const currentUrl = new URL(window.location.href);
@@ -571,9 +697,75 @@ cancelDeletionRequestButton.addEventListener("click", async () => {
 });
 
 async function loadFriends() {
-    const result = await api("/api/premium/friends");
-    friendsById = new Map(result.friends.map((friend) => [friend.id, friend]));
+    const [friends, requests] = await Promise.all([
+        api("/api/premium/friends"),
+        api("/api/premium/friend-requests")
+    ]);
+    friendsById = new Map(friends.friends.map((friend) => [friend.id, friend]));
     renderFriends();
+    renderFriendRequests(requests);
+}
+
+function renderFriendRequests(requests) {
+    const panel = document.getElementById("friendRequestsPanel");
+    const incoming = document.getElementById("incomingFriendRequests");
+    const outgoing = document.getElementById("outgoingFriendRequests");
+    incoming.replaceChildren();
+    outgoing.replaceChildren();
+    const incomingRequests = requests.incoming || [];
+    const outgoingRequests = requests.outgoing || [];
+    panel.hidden = !incomingRequests.length && !outgoingRequests.length;
+
+    if (incomingRequests.length) {
+        const list = document.createElement("div");
+        list.className = "friend-request-list";
+        for (const request of incomingRequests) {
+            const row = document.createElement("div");
+            row.className = "friend-request-item";
+            const username = document.createElement("span");
+            username.textContent = request.username;
+            const actions = document.createElement("div");
+            actions.className = "friend-request-actions";
+            for (const [label, accept] of [["Accept", true], ["Reject", false]]) {
+                const button = document.createElement("button");
+                button.type = "button";
+                button.className = accept ? "primary-button" : "danger-button";
+                button.textContent = label;
+                button.addEventListener("click", async () => {
+                    button.disabled = true;
+                    try {
+                        await api(`/api/premium/friend-requests/${encodeURIComponent(request.id)}/respond`, {
+                            method: "POST",
+                            body: JSON.stringify({ accept })
+                        });
+                        await loadFriends();
+                        setStatus(document.getElementById("friendStatus"),
+                            accept ? `You and ${request.username} are now friends.` : "Friend request rejected.",
+                            "success");
+                    } catch (error) {
+                        setStatus(document.getElementById("friendStatus"), error.message, "error");
+                        button.disabled = false;
+                    }
+                });
+                actions.appendChild(button);
+            }
+            row.append(username, actions);
+            list.appendChild(row);
+        }
+        incoming.appendChild(list);
+    }
+
+    if (outgoingRequests.length) {
+        const list = document.createElement("div");
+        list.className = "friend-request-list";
+        for (const request of outgoingRequests) {
+            const row = document.createElement("p");
+            row.className = "friend-request-outgoing";
+            row.textContent = `Request sent to ${request.username}`;
+            list.appendChild(row);
+        }
+        outgoing.appendChild(list);
+    }
 }
 
 function renderFriends() {
@@ -616,6 +808,12 @@ function connectPremiumSocket() {
     premiumSocket.on("premium-friend-added", async (friend) => {
         friendsById.set(friend.id, { id: friend.id, username: friend.username });
         renderFriends();
+        try {
+            await loadFriends();
+        } catch (error) {
+            setStatus(document.getElementById("friendStatus"), error.message, "error");
+            return;
+        }
         if (activeRecipient && activeRecipient.id === friend.id) {
             activeRandomMatch = false;
             document.getElementById("addMatchedFriendButton").hidden = true;
@@ -623,6 +821,29 @@ function connectPremiumSocket() {
             setMessageEntryEnabled(true);
         }
     });
+    premiumSocket.on("premium-friend-request", async (request) => {
+        try {
+            await loadFriends();
+            setStatus(document.getElementById("friendStatus"),
+                `${request.username} sent you a friend request.`);
+        } catch (error) {
+            setStatus(document.getElementById("friendStatus"), error.message, "error");
+        }
+    });
+    premiumSocket.on("premium-friend-request-updated", async (result) => {
+        try {
+            await loadFriends();
+        } catch (error) {
+            setStatus(document.getElementById("friendStatus"), error.message, "error");
+            return;
+        }
+        if (activeRecipient && activeRecipient.id === result.recipientId && !result.accepted) {
+            document.getElementById("addMatchedFriendButton").hidden = false;
+            setStatus(document.getElementById("matchStatus"), "Your friend request was rejected.");
+        }
+    });
+    premiumSocket.on("premium-friendship-ended", handleContactAccessEnded);
+    premiumSocket.on("premium-contact-blocked", handleContactAccessEnded);
     premiumSocket.on("premium-match-ended", () => {
         if (!activeRandomMatch) return;
         activeRandomMatch = false;
@@ -692,10 +913,16 @@ document.getElementById("addMatchedFriendButton").addEventListener("click", () =
             setStatus(document.getElementById("matchStatus"), result && result.error || "Could not add friend.", "error");
             return;
         }
-        activeRandomMatch = false;
         button.hidden = true;
+        if (result.alreadyFriends) {
+            activeRandomMatch = false;
+            await loadFriends();
+            setStatus(document.getElementById("matchStatus"), "You are already friends.", "success");
+            return;
+        }
         await loadFriends();
-        setStatus(document.getElementById("matchStatus"), "You are now friends. Your friend list stays after chat expiry.", "success");
+        setStatus(document.getElementById("matchStatus"),
+            "Friend request sent. You can keep chatting while they respond.", "success");
     });
 });
 
@@ -722,15 +949,52 @@ document.getElementById("addFriendForm").addEventListener("submit", async (event
     const username = document.getElementById("friendUsernameInput").value.trim();
     const status = document.getElementById("friendStatus");
     try {
-        await api("/api/premium/friends/request", {
+        const result = await api("/api/premium/friends/request", {
             method: "POST",
             body: JSON.stringify({ username })
         });
         document.getElementById("friendUsernameInput").value = "";
-        setStatus(status, "Friend added.", "success");
+        setStatus(status, result.accepted
+            ? `You and ${username} are now friends.`
+            : `Friend request sent to ${username}.`, "success");
         await loadFriends();
     } catch (error) {
         setStatus(status, error.message, "error");
+    }
+});
+
+document.getElementById("removeFriendButton").addEventListener("click", async () => {
+    if (!activeRecipient || !friendsById.has(activeRecipient.id)) return;
+    const friend = activeRecipient;
+    if (!window.confirm(`Remove @${friend.username} from your friends?`)) return;
+    try {
+        await api(`/api/premium/friends/${encodeURIComponent(friend.id)}`, { method: "DELETE" });
+        await handleContactAccessEnded({
+            userId: currentUser.id,
+            otherUserId: friend.id,
+            blocked: false
+        });
+        setStatus(document.getElementById("friendStatus"), `${friend.username} was removed.`, "success");
+    } catch (error) {
+        setStatus(document.getElementById("friendStatus"), error.message, "error");
+    }
+});
+
+document.getElementById("blockUserButton").addEventListener("click", async () => {
+    if (!activeRecipient) return;
+    const user = activeRecipient;
+    if (!window.confirm(`Block @${user.username}? This ends the chat and removes the friendship.`)) return;
+    try {
+        await api(`/api/premium/blocks/${encodeURIComponent(user.id)}`, { method: "POST" });
+        await handleContactAccessEnded({
+            userId: currentUser.id,
+            otherUserId: user.id,
+            blocked: true
+        });
+        await loadBlockedUsers();
+        setStatus(document.getElementById("friendStatus"), `${user.username} was blocked.`, "success");
+    } catch (error) {
+        setStatus(document.getElementById("friendStatus"), error.message, "error");
     }
 });
 
@@ -738,12 +1002,15 @@ async function selectRecipient(friend, randomMatch) {
     activeRecipient = friend;
     activeRandomMatch = randomMatch;
     document.getElementById("reportConversationButton").hidden = false;
+    document.getElementById("removeFriendButton").hidden = !friendsById.has(friend.id);
+    document.getElementById("blockUserButton").hidden = friend.id === currentUser.id;
     closeCall(true);
     document.getElementById("conversationTitle").textContent = friend.username;
     document.getElementById("conversationStatus").textContent = randomMatch
         ? "Premium random chat · messages expire individually after 24 hours."
         : "Friend chat · messages expire individually after 24 hours.";
     document.getElementById("addMatchedFriendButton").hidden = !randomMatch;
+    await loadRecipientProfile(friend);
     setMessageEntryEnabled(true);
     clearMessages();
     renderFriends();
@@ -752,6 +1019,56 @@ async function selectRecipient(friend, randomMatch) {
         result.messages.forEach(renderMessage);
     } catch (error) {
         addSystemNote(error.message);
+    }
+}
+
+async function handleContactAccessEnded(event) {
+    if (!activeRecipient || !event ||
+        (activeRecipient.id !== event.userId && activeRecipient.id !== event.otherUserId)) return;
+    const message = event.blocked
+        ? "This account was blocked. The conversation has ended."
+        : "Friendship ended. The conversation has been closed.";
+    closeCall(false);
+    activeRecipient = null;
+    activeRandomMatch = false;
+    clearMessages();
+    setMessageEntryEnabled(false);
+    document.getElementById("conversationTitle").textContent = "Choose a friend or find someone new";
+    document.getElementById("conversationStatus").textContent = message;
+    document.getElementById("addMatchedFriendButton").hidden = true;
+    document.getElementById("reportConversationButton").hidden = true;
+    document.getElementById("removeFriendButton").hidden = true;
+    document.getElementById("blockUserButton").hidden = true;
+    try {
+        await loadFriends();
+    } catch (error) {
+        setStatus(document.getElementById("friendStatus"), error.message, "error");
+    }
+}
+
+async function loadRecipientProfile(friend) {
+    const profileCard = document.getElementById("recipientProfile");
+    const avatar = document.getElementById("recipientAvatar");
+    profileCard.hidden = true;
+    avatar.hidden = true;
+    try {
+        const profile = await api(`/api/premium/user/${encodeURIComponent(friend.id)}`);
+        document.getElementById("recipientDisplayName").textContent =
+            profile.displayName || profile.username;
+        document.getElementById("recipientBio").textContent = profile.bio || "";
+        const details = [profile.country, profile.language,
+            ...(Array.isArray(profile.interests) ? profile.interests : [])].filter(Boolean);
+        document.getElementById("recipientProfileDetails").textContent = details.join(" · ");
+        if (profile.hasAvatar) {
+            avatar.src = `/api/premium/profile/avatar?userId=${encodeURIComponent(friend.id)}&updated=${Date.now()}`;
+            avatar.hidden = false;
+        }
+        profileCard.hidden = false;
+    } catch (error) {
+        if (error.message.includes("private")) return;
+        console.error("Could not load Premium profile:", error.message);
+        document.getElementById("conversationStatus").textContent =
+            "Chat is available, but profile details could not be loaded.";
     }
 }
 
@@ -831,7 +1148,7 @@ function renderMessage(message) {
     const body = document.createElement("div");
     body.className = "message-body";
     if (message.viewOnce && message.senderId !== currentUser.id && !message.viewedAt) {
-        body.textContent = message.mediaId ? "Single-view audio/video" : "Single-view text message";
+        body.textContent = message.mediaId ? "Single-view photo/audio/video" : "Single-view text message";
         const openButton = document.createElement("button");
         openButton.type = "button";
         openButton.className = "view-once-button";
@@ -880,6 +1197,14 @@ function appendMessageContent(container, message, mediaUrl) {
         container.appendChild(caption);
     }
     if (!message.mediaId) return;
+    if (message.mediaType && message.mediaType.startsWith("image/")) {
+        const image = document.createElement("img");
+        image.className = "premium-media-player";
+        image.alt = "Shared photo";
+        image.src = mediaUrl || `/api/premium/media/${encodeURIComponent(message.mediaId)}`;
+        container.appendChild(image);
+        return;
+    }
     const player = document.createElement(message.mediaType && message.mediaType.startsWith("video/")
         ? "video"
         : "audio");

@@ -12,9 +12,11 @@ It also includes an optional account-based Premium area; free anonymous chat rem
 - Leave and report actions
 - Password-protected admin dashboard at `/admin` with live user, connection, and report aggregates
 - Premium accounts with visible usernames, premium stranger matching, persistent friends, and text chats
+- Editable Premium profiles with a 2 MB JPG/PNG/WebP photo, bio, country, language, interests, and friends-only visibility
+- Persistent friend requests with accept/reject, friend removal, and block/unblock controls
 - Premium signup collects a private name and date of birth, requires an age of 18+, and suggests available unique usernames
-- Premium audio/video clip messages (up to 25 MB) and voice/video calls with WebRTC
-- Messages that expire 24 hours after sending; single-view messages expire one minute after opening
+- Premium photo/audio/video clip messages (up to 25 MB) and voice/video calls with WebRTC
+- Messages that expire 24 hours after sending; single-view text or media expires one minute after opening
 - Manual QR/UPI payments for one-month and three-month Premium plans, with screenshot/UTR verification by admin
 - Admin-created percentage coupons, payment history, account deletion requests, and membership lock controls
 - Report-only moderation: admins can review reported-chat text after entering an audited access reason; video/audio calls are never recorded
@@ -53,7 +55,13 @@ The free anonymous chat works without a database. Premium accounts and manual pa
 - `APP_BASE_URL` — public HTTPS site URL used to build password reset links in production.
 - `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, and `SMTP_FROM` — SMTP settings for password reset emails. SMTP authentication fields may both be omitted if the server allows unauthenticated relay.
 
-On startup, a Premium account can be created at `/premium`. Signup checks the age from the entered date of birth; name and date of birth are stored privately and only the username is shown to other users. Username suggestions are checked against existing accounts, and a database constraint enforces uniqueness. Passwords must be at least 6 characters. The sign-in page offers a one-time reset link sent to the account email; it expires after 30 minutes and resetting the password signs out active sessions. Configure SMTP and, in production, `APP_BASE_URL` to enable it. Google sign-in and email verification are not implemented yet.
+On startup, a Premium account can be created at `/premium`. Signup checks the age from the entered date of birth; name and date of birth are stored privately. Users can edit their profile and choose whether it is public or friends-only. Private profile details and photos are limited to friends, and date of birth is never included in public profile responses. Profile photos are limited to 2 MB and stored in PostgreSQL for this MVP; use object storage at larger scale. Username suggestions are checked against existing accounts, and a database constraint enforces uniqueness. Passwords must be at least 6 characters. The sign-in page offers a one-time reset link sent to the account email; it expires after 30 minutes and resetting the password signs out active sessions. Configure SMTP and, in production, `APP_BASE_URL` to enable it. Google sign-in and email verification are not implemented yet.
+
+Friend requests are stored in PostgreSQL. Users can accept or reject requests, remove friends, and block or unblock accounts; blocking removes the friendship and prevents further Premium matching, messaging, and calls between those accounts. These new tables and profile columns are created additively on application startup and do not delete existing account data.
+
+## Features not implemented yet
+
+The current release does not include Google sign-in, email verification, Stories, private Snaps, chat streaks, Memories/highlights, push notifications, account search/followers, advanced match filters, admin role/permission management, or admin 2FA. Do not treat those items as available until their code, required provider configuration, and end-to-end tests are added.
 
 The admin uploads the Premium UPI payment QR at `/admin`. Members choose one month (₹299) or three months (₹699), can apply a coupon, then submit their UTR and a JPG/PNG/WebP payment screenshot (up to 5 MB). Pending requests do not expire and only one can be pending per account. Admin verifies the proof, enters the actual amount received, and selects the plan to activate. Membership starts immediately if expired, or extends from the current expiry if it is still active. A 24-hour grace period follows the expiry timestamp. The account page shows membership status and payment history; members can sign out or request permanent account deletion. Admin can lock/unlock memberships and process deletion requests. Deleting an account permanently removes its profile, payment proof/history, messages, and friend links.
 

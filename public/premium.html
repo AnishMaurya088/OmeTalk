@@ -112,8 +112,41 @@
 
             <section id="accountSettings" class="card account-settings">
                 <details open>
-                    <summary>Account settings &amp; payment history</summary>
+                    <summary>Profile, privacy &amp; account settings</summary>
                     <div class="settings-content">
+                        <section class="profile-settings" aria-labelledby="profileSettingsTitle">
+                            <h2 id="profileSettingsTitle">Profile &amp; privacy</h2>
+                            <form id="profileForm" class="profile-form">
+                                <div class="profile-avatar-row">
+                                    <img id="profileAvatarPreview" class="profile-avatar" alt="Profile picture preview" hidden>
+                                    <div>
+                                        <label for="profileAvatarInput">Profile picture (JPG, PNG, WebP; max 2 MB)</label>
+                                        <input id="profileAvatarInput" type="file" accept="image/jpeg,image/png,image/webp">
+                                        <button id="removeProfileAvatarButton" class="text-button" type="button" hidden>Remove picture</button>
+                                    </div>
+                                </div>
+                                <label for="profileDisplayName">Display name</label>
+                                <input id="profileDisplayName" maxlength="50" autocomplete="nickname" required>
+                                <label for="profileBio">About me</label>
+                                <textarea id="profileBio" maxlength="160" rows="3"></textarea>
+                                <div class="profile-fields-row">
+                                    <div><label for="profileCountry">Country</label><input id="profileCountry" maxlength="80"></div>
+                                    <div><label for="profileLanguage">Language</label><input id="profileLanguage" maxlength="50"></div>
+                                </div>
+                                <label for="profileInterests">Interests (comma-separated, up to 10)</label>
+                                <input id="profileInterests" maxlength="330" placeholder="Music, travel, movies">
+                                <label class="profile-privacy-option">
+                                    <input id="profilePrivate" type="checkbox">
+                                    Only friends can view my profile
+                                </label>
+                                <button id="saveProfileButton" class="primary-button" type="submit">Save profile</button>
+                                <p id="profileStatus" class="status" role="status" aria-live="polite"></p>
+                            </form>
+                        </section>
+                        <section class="blocked-accounts" aria-labelledby="blockedAccountsTitle">
+                            <h2 id="blockedAccountsTitle">Blocked accounts</h2>
+                            <div id="blockedUsersList" class="blocked-users-list"></div>
+                        </section>
                         <h2>Payment history</h2>
                         <div class="history-table-wrap">
                             <table class="payment-history">
@@ -140,13 +173,18 @@
                     <button id="randomMatchButton" class="primary-button" type="button">Find a Premium stranger</button>
                     <p id="matchStatus" class="status" aria-live="polite"></p>
                     <form id="addFriendForm" class="add-friend-form">
-                        <label for="friendUsernameInput">Add friend by username</label>
+                        <label for="friendUsernameInput">Send friend request by username</label>
                         <div class="coupon-row">
                             <input id="friendUsernameInput" maxlength="24" placeholder="Their username">
-                            <button class="secondary-button" type="submit">Add</button>
+                        <button class="secondary-button" type="submit">Send request</button>
                         </div>
                         <p id="friendStatus" class="status" role="status" aria-live="polite"></p>
                     </form>
+                    <section id="friendRequestsPanel" class="friend-requests" aria-label="Friend requests" hidden>
+                        <h3>Friend requests</h3>
+                        <div id="incomingFriendRequests"></div>
+                        <div id="outgoingFriendRequests"></div>
+                    </section>
                     <div id="friendsList" class="friends-list" aria-label="Friends list"></div>
                 </aside>
 
@@ -159,7 +197,17 @@
                         </div>
                         <button id="addMatchedFriendButton" class="secondary-button" type="button" hidden>Add friend</button>
                         <button id="reportConversationButton" class="danger-button" type="button" hidden>Report conversation</button>
+                        <button id="removeFriendButton" class="secondary-button" type="button" hidden>Remove friend</button>
+                        <button id="blockUserButton" class="danger-button" type="button" hidden>Block user</button>
                     </div>
+                    <section id="recipientProfile" class="recipient-profile" aria-label="Friend profile" hidden>
+                        <img id="recipientAvatar" alt="" hidden>
+                        <div>
+                            <strong id="recipientDisplayName"></strong>
+                            <p id="recipientBio"></p>
+                            <p id="recipientProfileDetails"></p>
+                        </div>
+                    </section>
 
                     <div class="call-area" id="callArea" hidden>
                         <video id="callRemoteVideo" autoplay playsinline></video>
@@ -184,12 +232,12 @@
                         <button class="primary-button" type="submit" disabled>Send</button>
                     </form>
                     <div class="media-message-form">
-                        <label class="media-picker" for="mediaFileInput">Attach audio/video (max 25 MB)</label>
-                        <input id="mediaFileInput" type="file" accept="audio/webm,audio/ogg,audio/mp4,audio/wav,audio/mpeg,audio/flac,audio/aac,video/webm,video/mp4,video/quicktime,video/ogg" disabled>
+                        <label class="media-picker" for="mediaFileInput">Attach photo, audio, or video (max 25 MB)</label>
+                        <input id="mediaFileInput" type="file" accept="image/jpeg,image/png,image/webp,audio/webm,audio/ogg,audio/mp4,audio/wav,audio/mpeg,audio/flac,audio/aac,video/webm,video/mp4,video/quicktime,video/ogg" disabled>
                         <button id="sendMediaButton" class="secondary-button" type="button" disabled>Send media</button>
                         <p id="mediaStatus" class="status" role="status" aria-live="polite"></p>
                     </div>
-                    <p class="expiry-note">Each message expires 24 hours after it is sent. Single-view text or media disappears 1 minute after opening; screenshots and screen recording cannot be prevented.</p>
+                    <p class="expiry-note">Each message expires 24 hours after it is sent. Single-view text, photos, audio, or video disappears 1 minute after opening; screenshots and screen recording cannot be prevented.</p>
                 </section>
             </section>
         </section>
