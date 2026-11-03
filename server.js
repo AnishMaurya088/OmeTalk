@@ -4,6 +4,10 @@ const crypto = require("crypto");
 const fs = require("fs");
 const { Server } = require("socket.io");
 const path = require("path");
+const {
+    attachPremiumRoutes,
+    initializePremiumDatabase
+} = require("./premium-server");
 
 const app = express();
 const server = http.createServer(app);
@@ -19,6 +23,9 @@ const ADMIN_SESSION_TTL = 8 * 60 * 60 * 1000;
 const ADMIN_LOGIN_WINDOW = 15 * 60 * 1000;
 const ADMIN_MAX_LOGIN_ATTEMPTS = 5;
 const ADMIN_METRICS_FILE = path.join(__dirname, "data", "admin-metrics.json");
+const MODERATION_REPORTS_FILE = path.join(__dirname, "data", "moderation-reports.json");
+const MODERATION_REPORT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+const MAX_REPORTED_CHAT_MESSAGES = 100;
 const adminSessions = new Map();
 const adminLoginAttempts = new Map();
 const serverStartedAt = Date.now();
@@ -38,6 +45,60 @@ function loadAdminMetrics() {
 }
 
 const adminMetrics = loadAdminMetrics();
+
+function loadModerationReports() {
+    try {
+        const stored = JSON.parse(fs.readFileSync(MODERATION_REPORTS_FILE, "utf8"));
+        if (!Array.isArray(stored)) {
+            console.error("Could not read moderation reports: expected a JSON array.");
+            return [];
+        }
+        const validReports = stored.filter((report) =>
+            report && typeof report.id === "string" &&
+            typeof report.createdAt === "string" &&
+            Array.isArray(report.transcript)
+        );
+        if (validReports.length !== stored.length) {
+            console.error("Some moderation report records were malformed and could not be loaded.");
+        }
+        return validReports.map((report) => ({
+            ...report,
+            accessLog: Array.isArray(report.accessLog) ? report.accessLog : [],
+            auditLog: Array.isArray(report.auditLog) ? report.auditLog : [],
+            status: report.status === "resolved" ? "resolved" : "pending",
+            reviewNote: typeof report.reviewNote === "string" ? report.reviewNote : ""
+        }));
+    } catch (error) {
+        if (error.code !== "ENOENT") console.error("Could not read moderation reports:", error.message);
+        return [];
+    }
+}
+
+const moderationReports = loadModerationReports();
+
+function saveModerationReports() {
+    try {
+        fs.mkdirSync(path.dirname(MODERATION_REPORTS_FILE), { recursive: true });
+        fs.writeFileSync(MODERATION_REPORTS_FILE, JSON.stringify(moderationReports), { mode: 0o600 });
+        return true;
+    } catch (error) {
+        console.error("Could not save moderation reports:", error.message);
+        return false;
+    }
+}
+
+function pruneModerationReports() {
+    const cutoff = Date.now() - MODERATION_REPORT_RETENTION_MS;
+    const retained = moderationReports.filter((report) =>
+        Date.parse(report.createdAt) > cutoff
+    );
+    if (retained.length === moderationReports.length) return;
+    moderationReports.splice(0, moderationReports.length, ...retained);
+    saveModerationReports();
+}
+
+const moderationRetentionTimer = setInterval(pruneModerationReports, 60 * 60 * 1000);
+moderationRetentionTimer.unref();
 
 function saveAdminMetrics() {
     try {
@@ -323,6 +384,8 @@ function requireAdmin(req, res, next) {
     next();
 }
 
+attachPremiumRoutes(app, io, requireAdmin, recordConnection);
+
 app.post("/api/admin/login", (req, res) => {
     const adminPassword = process.env.ADMIN_PASSWORD;
     if (!adminPassword || adminPassword.length < 16) {
@@ -393,11 +456,101 @@ app.get("/api/admin/stats", requireAdmin, (req, res) => {
         ? req.query.range
         : "all";
     res.json({
-        liveUsers: io.sockets.sockets.size,
+        liveUsers: io.sockets.sockets.size + io.of("/premium").sockets.size,
+        pendingReports: moderationReports.filter((report) => report.status === "pending").length,
         ...getPeriodMetrics(requestedRange),
         serverStartedAt,
         serverUptimeSeconds: Math.floor((Date.now() - serverStartedAt) / 1000)
     });
+});
+
+app.get("/api/admin/reports", requireAdmin, (req, res) => {
+    pruneModerationReports();
+    res.set("Cache-Control", "no-store");
+    res.json({
+        reports: moderationReports.map((report) => ({
+            id: report.id,
+            category: report.category,
+            reporterName: report.reporterName,
+            reportedName: report.reportedName,
+            messageCount: report.transcript.length,
+            createdAt: report.createdAt,
+            status: report.status,
+            reviewedAt: report.reviewedAt
+        }))
+    });
+});
+
+app.get("/api/admin/reports/:reportId", requireAdmin, (req, res) => {
+    pruneModerationReports();
+    const report = moderationReports.find((item) => item.id === req.params.reportId);
+    if (!report) {
+        res.status(404).json({ error: "This report was not found or has expired." });
+        return;
+    }
+
+    const reason = typeof req.query.reason === "string" ? req.query.reason.trim().slice(0, 500) : "";
+    if (reason.length < 10) {
+        res.status(400).json({ error: "Enter at least 10 characters explaining why you need to access this reported conversation." });
+        return;
+    }
+
+    const previousAccessLog = [...report.accessLog];
+    report.accessLog.push({
+        accessedAt: new Date().toISOString(),
+        reason,
+        adminSession: crypto.createHash("sha256").update(getAdminSessionToken(req) || "").digest("hex").slice(0, 16)
+    });
+    report.accessLog = report.accessLog.slice(-50);
+    if (!saveModerationReports()) {
+        report.accessLog = previousAccessLog;
+        res.status(503).json({ error: "Could not record the access audit. Conversation content was not opened." });
+        return;
+    }
+
+    res.set("Cache-Control", "no-store");
+    res.json({ report });
+});
+
+app.patch("/api/admin/reports/:reportId", requireAdmin, (req, res) => {
+    pruneModerationReports();
+    const report = moderationReports.find((item) => item.id === req.params.reportId);
+    if (!report) {
+        res.status(404).json({ error: "This report was not found." });
+        return;
+    }
+    const status = req.body && req.body.status;
+    const note = typeof (req.body && req.body.note) === "string"
+        ? req.body.note.trim().slice(0, 1000)
+        : "";
+    if (!["pending", "resolved"].includes(status)) {
+        res.status(400).json({ error: "Choose pending or resolved." });
+        return;
+    }
+
+    const previous = {
+        status: report.status,
+        reviewedAt: report.reviewedAt,
+        reviewNote: report.reviewNote,
+        auditLog: [...report.auditLog]
+    };
+    report.status = status;
+    report.reviewedAt = status === "resolved" ? new Date().toISOString() : null;
+    report.reviewNote = note;
+    report.auditLog.push({
+        action: status === "resolved" ? "resolved" : "reopened",
+        at: new Date().toISOString(),
+        note,
+        adminSession: crypto.createHash("sha256").update(getAdminSessionToken(req) || "").digest("hex").slice(0, 16)
+    });
+    report.auditLog = report.auditLog.slice(-100);
+    if (!saveModerationReports()) {
+        Object.assign(report, previous);
+        res.status(503).json({ error: "Could not save the report update." });
+        return;
+    }
+    res.set("Cache-Control", "no-store");
+    res.json({ success: true });
 });
 
 // ================================================
@@ -407,6 +560,7 @@ app.get("/api/admin/stats", requireAdmin, (req, res) => {
 let waitingQueue = [];
 const activePartners = new Map();
 const activeRooms = new Map();
+const chatTranscripts = new Map();
 
 function getRoomId(socketA, socketB) {
     return [socketA.id, socketB.id].sort().join("-");
@@ -425,6 +579,7 @@ function leaveChat(socket, reason = "left") {
     activePartners.delete(socket.id);
     activeRooms.delete(socket.id);
     if (roomId) socket.leave(roomId);
+    if (roomId) chatTranscripts.delete(roomId);
 
     if (!partnerId) return;
 
@@ -440,6 +595,7 @@ function leaveChat(socket, reason = "left") {
 
 function matchUsers(socketA, socketB, matchOptions) {
     const roomId = getRoomId(socketA, socketB);
+    chatTranscripts.set(roomId, []);
     const sharedInterests = (socketA.data.matchOptions.interests || []).filter((interest) =>
         socketB.data.matchOptions.interests.includes(interest)
     );
@@ -576,6 +732,15 @@ io.on("connection", (socket) => {
 
         if (!cleanMessage || cleanMessage.length > 1000) return;
 
+        const transcript = chatTranscripts.get(roomId);
+        if (transcript) {
+            transcript.push({
+                senderName: socket.data.matchOptions && socket.data.matchOptions.name || "Anonymous",
+                message: cleanMessage,
+                sentAt: new Date().toISOString()
+            });
+            if (transcript.length > MAX_REPORTED_CHAT_MESSAGES) transcript.shift();
+        }
         socket.to(roomId).emit("receive-message", {
             message: cleanMessage
         });
@@ -641,15 +806,48 @@ io.on("connection", (socket) => {
         if (typeof acknowledge === "function") acknowledge({ success: true });
     });
 
-    socket.on("report-stranger", (acknowledge) => {
+    socket.on("report-stranger", (data, acknowledge) => {
+        if (typeof data === "function") {
+            acknowledge = data;
+            data = {};
+        }
         const partnerId = activePartners.get(socket.id);
-        if (!partnerId) {
-            if (typeof acknowledge === "function") acknowledge({ success: false });
+        const roomId = activeRooms.get(socket.id);
+        const category = String(data && data.category || "other").trim().slice(0, 60);
+        const allowedCategories = ["harassment", "sexual content", "spam", "impersonation", "other"];
+        if (!partnerId || !roomId || !allowedCategories.includes(category.toLowerCase())) {
+            if (typeof acknowledge === "function") acknowledge({ success: false, error: "The report details are invalid or the chat has ended." });
+            return;
+        }
+
+        const reporter = socket.data.matchOptions || {};
+        const reportedSocket = io.sockets.sockets.get(partnerId);
+        const reported = reportedSocket && reportedSocket.data.matchOptions || {};
+        const report = {
+            id: crypto.randomUUID(),
+            category: category.toLowerCase(),
+            reporterName: reporter.name || "Anonymous",
+            reportedName: reported.name || "Anonymous",
+            createdAt: new Date().toISOString(),
+            status: "pending",
+            reviewedAt: null,
+            reviewNote: "",
+            accessLog: [],
+            auditLog: [],
+            transcript: [...(chatTranscripts.get(roomId) || [])]
+        };
+        pruneModerationReports();
+        moderationReports.push(report);
+        if (!saveModerationReports()) {
+            moderationReports.pop();
+            if (typeof acknowledge === "function") {
+                acknowledge({ success: false, error: "The report could not be securely saved. Please try again." });
+            }
             return;
         }
 
         recordReport();
-        console.log(`Report submitted: ${socket.id} reported ${partnerId}`);
+        console.log(`Moderation report received: ${report.id} (${report.category})`);
         leaveChat(socket, "reported");
         if (typeof acknowledge === "function") acknowledge({ success: true });
     });
@@ -661,19 +859,28 @@ io.on("connection", (socket) => {
     });
 });
 
-server.listen(PORT, () => {
-    console.log("");
-    console.log("====================================");
-    console.log("        OMETALK SERVER STARTED");
-    console.log("====================================");
-    console.log("");
-    console.log(`Website: http://localhost:${PORT}`);
-    console.log("");
+function startServer() {
+    server.listen(PORT, () => {
+        console.log("");
+        console.log("====================================");
+        console.log("        OMETALK SERVER STARTED");
+        console.log("====================================");
+        console.log("");
+        console.log(`Website: http://localhost:${PORT}`);
+        console.log("");
 
-    syncSavedFeedbackEntries()
-        .then(({ synced, pending }) => {
-            if (synced) console.log(`Synced ${synced} queued feedback entries.`);
-            if (pending) console.warn(`${pending} feedback entries remain queued.`);
-        })
-        .catch((error) => console.error("Could not retry queued feedback:", error.message));
-});
+        syncSavedFeedbackEntries()
+            .then(({ synced, pending }) => {
+                if (synced) console.log(`Synced ${synced} queued feedback entries.`);
+                if (pending) console.warn(`${pending} feedback entries remain queued.`);
+            })
+            .catch((error) => console.error("Could not retry queued feedback:", error.message));
+    });
+}
+
+startServer();
+
+initializePremiumDatabase()
+    .catch((error) => {
+        console.error("Could not initialize Premium PostgreSQL schema:", error.message);
+    });

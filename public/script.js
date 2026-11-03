@@ -6,6 +6,7 @@ const startBtn = document.getElementById("startBtn");
 const nextBtn = document.getElementById("nextBtn");
 const leaveBtn = document.getElementById("leaveBtn");
 const reportBtn = document.getElementById("reportBtn");
+const premiumInviteBtn = document.getElementById("premiumInviteBtn");
 const interestsInput = document.getElementById("interestsInput");
 const profileNameInput = document.getElementById("profileName");
 const partnerName = document.getElementById("partnerName");
@@ -33,7 +34,6 @@ const appContainer = document.querySelector(".app-container");
 const startChatLinks = [...document.querySelectorAll(".start-chat-link")];
 const backHomeBtn = document.getElementById("backHomeBtn");
 const faqDialog = document.getElementById("faqDialog");
-const premiumDialog = document.getElementById("premiumDialog");
 const localVideo = document.getElementById("localVideo");
 const remoteVideo = document.getElementById("remoteVideo");
 const remotePlaceholder = document.getElementById("remotePlaceholder");
@@ -55,6 +55,7 @@ let pendingIceCandidates = [];
 let typingTimeout = null;
 let isTyping = false;
 let isVideoMinimized = false;
+let premiumInviteAvailable = false;
 
 const rtcConfiguration = {
     iceServers: [
@@ -79,6 +80,7 @@ socket.on("connect", () => {
     console.log("Connected to server:", socket.id);
     onlineText.textContent = "Connected";
     resetToWelcomeState();
+    checkPremiumInviteAvailability();
 });
 
 socket.on("disconnect", () => {
@@ -91,6 +93,7 @@ socket.on("disconnect", () => {
     currentPartnerId = null;
     currentRoomId = null;
     isSearching = false;
+    premiumInviteBtn.hidden = true;
 });
 
 ageConsent.addEventListener("change", () => {
@@ -119,35 +122,13 @@ interestChips.forEach((chip) => {
 
 chatModeInputs.forEach((input) => {
     input.addEventListener("change", () => {
-        const mode = input.value;
-        modeHint.textContent = input.value === "video"
+        currentMode = input.value;
+        modeHint.textContent = currentMode === "video"
             ? "Video chat selected. Camera and microphone are needed to connect."
             : "Text chat selected. No camera or microphone needed to connect.";
-        updateModeStory(mode);
+        updateModeStory(currentMode);
     });
 });
-
-strangerVideoContainer.addEventListener("click", () => {
-    if (isVideoMinimized) {
-        toggleVideoLayout();
-        return;
-    }
-    setVideoFocus("stranger");
-});
-myVideoContainer.addEventListener("click", () => {
-    if (isVideoMinimized) {
-        toggleVideoLayout();
-        return;
-    }
-    setVideoFocus("self");
-});
-strangerVideoContainer.addEventListener("keydown", (event) => handleVideoViewKeydown(event, "stranger"));
-myVideoContainer.addEventListener("keydown", (event) => handleVideoViewKeydown(event, "self"));
-if (videoLayoutBtn) {
-    videoLayoutBtn.addEventListener("click", toggleVideoLayout);
-}
-messageInput.addEventListener("input", updateTypingState);
-setVideoFocus("stranger");
 
 function updateModeStory(mode) {
     const isVideo = mode === "video";
@@ -179,14 +160,36 @@ function updateModeStory(mode) {
     });
 }
 
+strangerVideoContainer.addEventListener("click", () => {
+    if (isVideoMinimized) {
+        toggleVideoLayout();
+        return;
+    }
+    setVideoFocus("stranger");
+});
+myVideoContainer.addEventListener("click", () => {
+    if (isVideoMinimized) {
+        toggleVideoLayout();
+        return;
+    }
+    setVideoFocus("self");
+});
+strangerVideoContainer.addEventListener("keydown", (event) => handleVideoViewKeydown(event, "stranger"));
+myVideoContainer.addEventListener("keydown", (event) => handleVideoViewKeydown(event, "self"));
+if (videoLayoutBtn) {
+    videoLayoutBtn.addEventListener("click", toggleVideoLayout);
+}
+messageInput.addEventListener("input", updateTypingState);
+setVideoFocus("stranger");
+
 startChatLinks.forEach((button) => {
     button.addEventListener("click", () => {
-        const modeInput = chatModeInputs.find((input) => input.value === button.dataset.mode);
+        const mode = button.dataset.mode === "text" ? "text" : "video";
+        const modeInput = chatModeInputs.find((input) => input.value === mode);
         if (modeInput) {
             modeInput.checked = true;
             modeInput.dispatchEvent(new Event("change", { bubbles: true }));
         }
-
         homePage.classList.add("hidden");
         appContainer.classList.remove("hidden");
         welcomeScreen.classList.remove("hidden");
@@ -204,8 +207,9 @@ backHomeBtn.addEventListener("click", () => {
 document.getElementById("faqOpenBtn").addEventListener("click", () => faqDialog.showModal());
 document.getElementById("footerFaqBtn").addEventListener("click", () => faqDialog.showModal());
 document.getElementById("faqCloseBtn").addEventListener("click", () => faqDialog.close());
-document.getElementById("premiumOpenBtn").addEventListener("click", () => premiumDialog.showModal());
-document.getElementById("premiumCloseBtn").addEventListener("click", () => premiumDialog.close());
+document.getElementById("premiumOpenBtn").addEventListener("click", () => {
+    window.location.href = "/premium";
+});
 
 startBtn.addEventListener("click", async () => {
     await startSearching();
@@ -218,6 +222,7 @@ nextBtn.addEventListener("click", async () => {
     isSearching = true;
     currentPartnerId = null;
     currentRoomId = null;
+    premiumInviteBtn.hidden = true;
 
     closePeerConnection();
     remoteVideo.srcObject = null;
@@ -238,6 +243,7 @@ leaveBtn.addEventListener("click", () => {
     currentPartnerId = null;
     currentRoomId = null;
     isSearching = false;
+    premiumInviteBtn.hidden = true;
 
     closePeerConnection();
     stopCamera();
@@ -258,14 +264,77 @@ leaveBtn.addEventListener("click", () => {
     startBtn.disabled = !ageConsent.checked;
 });
 
+premiumInviteBtn.addEventListener("click", async () => {
+    if (!currentPartnerId || !premiumInviteAvailable) return;
+    premiumInviteBtn.disabled = true;
+    try {
+        const response = await fetch("/api/premium/invites", {
+            method: "POST",
+            credentials: "same-origin",
+            cache: "no-store"
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "Could not create an invitation.");
+        socket.emit("premium-invite", {
+            token: result.token,
+            partnerId: currentPartnerId
+        }, (sent) => {
+            if (!sent || !sent.success) {
+                addSystemMessage(sent && sent.error || "Could not send this invitation.");
+                return;
+            }
+            addSystemMessage("Premium invitation sent. Your friend can join and create an account to reconnect.");
+        });
+    } catch (error) {
+        addSystemMessage(error.message);
+    } finally {
+        premiumInviteBtn.disabled = false;
+    }
+});
+
+async function checkPremiumInviteAvailability() {
+    try {
+        const response = await fetch("/api/premium/me", {
+            credentials: "same-origin",
+            cache: "no-store"
+        });
+        premiumInviteAvailable = false;
+        if (!response.ok) {
+            premiumInviteBtn.hidden = true;
+            if (response.status !== 401 && response.status !== 503) {
+                console.error("Could not check Premium invitation eligibility:", response.status);
+            }
+            return;
+        }
+        const account = await response.json();
+        premiumInviteAvailable = account.premiumActive === true;
+        premiumInviteBtn.hidden = !premiumInviteAvailable || !currentPartnerId;
+    } catch (error) {
+        premiumInviteAvailable = false;
+        premiumInviteBtn.hidden = true;
+        console.error("Could not check Premium invitation eligibility:", error);
+    }
+}
+
 reportBtn.addEventListener("click", () => {
     if (!currentPartnerId || reportBtn.disabled) return;
 
+    const category = window.prompt(
+        "Choose a report category: harassment, sexual content, spam, impersonation, or other.",
+        "harassment"
+    );
+    if (category === null) return;
+    const normalizedCategory = category.trim().toLowerCase();
+    if (!["harassment", "sexual content", "spam", "impersonation", "other"].includes(normalizedCategory)) {
+        addSystemMessage("Choose harassment, sexual content, spam, impersonation, or other to submit a report.");
+        return;
+    }
+
     reportBtn.disabled = true;
-    socket.emit("report-stranger", (result) => {
+    socket.emit("report-stranger", { category: normalizedCategory }, (result) => {
         if (!result || !result.success) {
             reportBtn.disabled = false;
-            addSystemMessage("Unable to submit report. The chat may have ended.");
+            addSystemMessage(result && result.error || "Unable to submit report. The chat may have ended.");
             return;
         }
 
@@ -283,13 +352,8 @@ async function startSearching() {
     if (isSearching || !ageConsent.checked || !socket.connected) return;
 
     isSearching = true;
-    const selectedMode = document.querySelector('input[name="chatMode"]:checked');
-    if (!selectedMode) {
-        isSearching = false;
-        return;
-    }
-
-    currentMode = selectedMode.value;
+    const selectedMode = chatModeInputs.find((input) => input.checked);
+    currentMode = selectedMode && selectedMode.value === "text" ? "text" : "video";
     welcomeScreen.classList.add("hidden");
     chatScreen.classList.remove("hidden");
     chatScreen.classList.toggle("text-mode", currentMode === "text");
@@ -365,6 +429,7 @@ socket.on("matched", async (data) => {
     partnerName.textContent = data.partnerName || "Stranger";
     currentMode = data.mode || currentMode;
     isSearching = false;
+    premiumInviteBtn.hidden = !premiumInviteAvailable;
 
     chatScreen.classList.toggle("text-mode", currentMode === "text");
     chatStatus.textContent = currentMode === "text"
@@ -572,6 +637,7 @@ socket.on("partner-left", () => {
     currentPartnerId = null;
     currentRoomId = null;
     isSearching = false;
+    premiumInviteBtn.hidden = true;
     stopTyping();
     typingIndicator.textContent = "";
     typingIndicator.classList.remove("visible");
@@ -587,6 +653,22 @@ socket.on("partner-left", () => {
 
     addSystemMessage("The stranger has left the chat.");
     addSystemMessage("Click Next to find someone else.");
+});
+
+socket.on("premium-invite", (invite) => {
+    if (!invite || typeof invite.url !== "string") return;
+    const message = document.createElement("div");
+    message.className = "system-message";
+    const text = document.createElement("span");
+    text.textContent = `${invite.username || "Your chat partner"} invited you to OmeTalk Premium. `;
+    const link = document.createElement("a");
+    link.href = invite.url;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.textContent = "Create an account to reconnect";
+    message.append(text, link);
+    messages.appendChild(message);
+    scrollToBottom();
 });
 
 if (cameraBtn) {
@@ -747,7 +829,7 @@ function stopCamera() {
 function addMyMessage(message) {
     const messageElement = document.createElement("div");
     messageElement.className = "message my-message";
-    messageElement.textContent = message;
+    appendMessageContent(messageElement, message);
     messages.appendChild(messageElement);
     scrollToBottom();
 }
@@ -755,9 +837,24 @@ function addMyMessage(message) {
 function addStrangerMessage(message) {
     const messageElement = document.createElement("div");
     messageElement.className = "message stranger-message";
-    messageElement.textContent = message;
+    appendMessageContent(messageElement, message);
     messages.appendChild(messageElement);
     scrollToBottom();
+}
+
+function appendMessageContent(messageElement, message) {
+    const body = document.createElement("span");
+    body.className = "message-content";
+    body.textContent = message;
+    const sentAt = new Date();
+    const time = document.createElement("time");
+    time.className = "message-time";
+    time.dateTime = sentAt.toISOString();
+    time.textContent = sentAt.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit"
+    });
+    messageElement.append(body, time);
 }
 
 function addSystemMessage(message) {
@@ -775,5 +872,3 @@ function clearMessages() {
 function scrollToBottom() {
     messages.scrollTop = messages.scrollHeight;
 }
-
-
